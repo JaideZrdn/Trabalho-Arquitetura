@@ -1,0 +1,33 @@
+# ---- Quartus: tudo abaixo é gerado, nada é fonte ----
+db/
+incremental_db/
+output_files/
+simulation/
+greybox_tmp/
+hc_output/
+.qsys_edit/
+*.qws
+*.rpt
+*.summary
+*.smsg
+*.pin
+*.sof
+*.pof
+*.jdi
+*.done
+*.qarlog
+*.bak
+
+# ---- ModelSim / Questa ----
+work/
+transcript
+vsim.wlf
+*.vcd
+
+# ---- Python (montador) ----
+__pycache__/
+*.pyc
+.venv/
+
+# ---- macOS ----
+.DS_Store

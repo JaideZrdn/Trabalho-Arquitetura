@@ -1,0 +1,8 @@
+# O Quartus reescreve e reordena o .qsf ao salvar. Merge automático nesse
+# arquivo produz projeto quebrado — resolver sempre na mão.
+*.qsf merge=union -diff
+*.qpf -diff
+
+# Verilog: fim de linha normalizado (equipe em SO diferentes)
+*.v   text eol=lf
+*.sv  text eol=lf
