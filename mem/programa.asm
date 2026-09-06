@@ -36,7 +36,16 @@
 # implementa.
 
 swap:
-        # TODO
+        # Corpo traduzido em 05/09/2026.
+        # Argumentos: v em $a0, k em $a1  (convencao MIPS: 1o arg $a0, 2o arg $a1)
+        # $a0 e $a1 nao sao alterados — sort ainda precisa deles apos a chamada.
+        sll  $t1, $a1, 2      # $t1 = k * 4   (deslocar 2 a esquerda = multiplicar por 4)
+        add  $t1, $a0, $t1    # $t1 = v + k*4 = endereco de v[k]
+        lw   $t2, 0($t1)      # $t2 = v[k]      -> temp
+        lw   $t0, 4($t1)      # $t0 = v[k+1]    (int ocupa 4 bytes)
+        sw   $t0, 0($t1)      # v[k]   = $t0    -> v[k] = v[k+1]
+        sw   $t2, 4($t1)      # v[k+1] = $t2    -> v[k+1] = temp
+        # TODO: retorno ao chamador
 
 sort:
         # TODO
