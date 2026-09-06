@@ -45,7 +45,7 @@ swap:
         lw   $t0, 4($t1)      # $t0 = v[k+1]    (int ocupa 4 bytes)
         sw   $t0, 0($t1)      # v[k]   = $t0    -> v[k] = v[k+1]
         sw   $t2, 4($t1)      # v[k+1] = $t2    -> v[k+1] = temp
-        # TODO: retorno ao chamador
+        jr   $ra              # volta para a instrucao seguinte ao jal que chamou
 
 sort:
         # TODO
