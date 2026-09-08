@@ -11,9 +11,23 @@ Referência de projeto: Patterson & Hennessy, *Computer Organization and Design*
 
 | Nome | Matrícula | Blocos sob responsabilidade |
 |---|---|---|
-| _(preencher)_ | | |
-| _(preencher)_ | | |
-| _(preencher)_ | | |
+| Ana Clara Eid Freire | 22401684 | Pessoa B — ULA e controle |
+| Jaide Fernando de Carvalho Zardin | 22350981 | _(a decidir — Pessoa A ou C)_ |
+| Manuela Lopes Figueira | 22400983 | _(a decidir — Pessoa A ou C)_ |
+
+Divisão por bloco funcional (não por fase do pipeline), pra permitir trabalho
+em paralelo desde o início:
+
+- **Pessoa A — Datapath e memória:** banco de registradores · memória de
+  instruções · memória de dados · extensor de sinal · multiplexadores do
+  datapath
+- **Pessoa B — ULA e controle:** ALU parametrizada · unidade de controle
+  principal · ALU control · somador de PC / lógica de branch-jump
+- **Pessoa C — Pipeline, hazards e integração:** registradores de pipeline ·
+  unidade de forwarding · detecção de hazard (stall) · integração final +
+  testbench do processador completo
+
+Todos participam da fase de testes e da escrita do relatório.
 
 ## Estrutura do repositório
 
@@ -49,30 +63,42 @@ mem/programa.asm  --[ tools/assembler.py ]-->  mem/programa.mif  -->  memória d
 O `.mif` é **gerado**, nunca editado à mão. Alterou o `.asm`, roda o montador e
 commita os dois juntos.
 
+**Status (08/09/2026):** `mem/programa.asm` está completo — `swap()`,
+`sort()` e `main()` traduzidos, incluindo o salto de entrada `j main` no
+endereço 0 (sem ele o processador cairia dentro de `swap()` no boot, já que
+o PC começa em 0 e executa a primeira instrução física do arquivo, não um
+rótulo). Validado por simulação de execução instrução-a-instrução a partir
+do endereço 0: o vetor de teste termina ordenado corretamente.
+`tools/assembler.py` **ainda não está implementado** — sem ele não é
+possível gerar o `.mif`.
+
 ## Blocos funcionais
 
 Cada bloco é um cartão no Trello e um par `rtl/<bloco>.v` + `tb/<bloco>_tb.v`.
 
 **Caminho de dados**
 
-- PC + somador de PC
-- Memória de instrução
-- Banco de registradores
-- Extensor de sinal
-- ALU + ALU control
-- Memória de dados
-- Multiplexadores de escrita e de forwarding
+- PC + somador de PC — Pessoa B
+- Memória de instrução — Pessoa A
+- Banco de registradores — Pessoa A
+- Extensor de sinal — Pessoa A
+- ALU + ALU control — Pessoa B
+- Memória de dados — Pessoa A
+- Multiplexador de escrita — Pessoa A
+- Multiplexador de forwarding — Pessoa C _(fica junto da unidade de
+  forwarding; confirmar com quem pegar essa frente)_
 
 **Registradores de pipeline**
 
-- IF/ID · ID/EX · EX/MEM · MEM/WB
+- IF/ID · ID/EX · EX/MEM · MEM/WB — Pessoa C
 
 **Controle e hazards**
 
-- Unidade de controle
-- Unidade de forwarding
-- Unidade de detecção de hazard (stall)
-- Tratamento de hazard de controle (branch)
+- Unidade de controle — Pessoa B
+- Unidade de forwarding — Pessoa C
+- Unidade de detecção de hazard (stall) — Pessoa C
+- Tratamento de hazard de controle (branch) — Pessoa C _(fronteira com o
+  somador de PC/branch da Pessoa B; acertar a interface entre os dois)_
 
 Todos os blocos devem ser parametrizados (larguras via `parameter`), conforme
 exige o enunciado.
@@ -115,20 +141,20 @@ Apresentações parciais definidas no enunciado:
 | Entrega | Data | Escopo previsto |
 |---|---|---|
 | 1ª | 11/09/2026 | Contexto, plataforma, memória de programa, plano, Trello |
-| 2ª | 09/10/2026 | _(preencher)_ |
-| 3ª | 13/11/2026 | _(preencher)_ |
-| 4ª | 11/12/2026 | _(preencher)_ |
+| 2ª | 09/10/2026 | Datapath monociclo rodando em simulação, executando ao menos uma instrução de cada formato (R, I, J) |
+| 3ª | 13/11/2026 | Pipeline completo em simulação, com os três tipos de hazard tratados e o `sort` completo validado |
+| 4ª | 11/12/2026 | Processador sintetizado e testado na DE2-115; relatório técnico completo; apresentação final |
 
 ## Primeira entrega — checklist
 
 Itens exigidos, conforme enunciado da apresentação:
 
-- [ ] 1. Título do projeto
-- [ ] 2. Nome dos integrantes
-- [ ] 3. Contexto, problema e objetivos
-- [ ] 4. Plataforma e material necessário
-- [ ] 5. Memória de programa codificada em binário
-- [ ] 6. Plano de trabalho
-- [ ] 7. Gerenciamento do projeto no Trello
+- [x] 1. Título do projeto
+- [x] 2. Nome dos integrantes
+- [ ] 3. Contexto, problema e objetivos — rascunho pronto em `docs/relatorio-entrega-1.md`, falta revisar com as próprias palavras
+- [ ] 4. Plataforma e material necessário — FPGA (DE2-115) e simulador (ModelSim-Altera) definidos; falta confirmar versão do Quartus do laboratório
+- [ ] 5. Memória de programa codificada em binário — assembly completo e validado por simulação; falta implementar `tools/assembler.py` pra gerar o `.mif`
+- [ ] 6. Plano de trabalho — cronograma e divisão por bloco prontos; falta decidir quem é Pessoa A e Pessoa C
+- [ ] 7. Gerenciamento do projeto no Trello — board criado (link no relatório); falta print das listas
 
 Prazo: **11/09/2026, 13:59h.** Atraso desconta 2 pontos por dia.
