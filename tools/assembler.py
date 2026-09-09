@@ -65,6 +65,7 @@ def campo(valor: int, bits: int) -> str:
     É a operação que todo o resto usa. Precisa tratar valor negativo em
     complemento de dois (o imediato de beq/addi pode ser negativo).
     """
+    original = valor
     resultado: str = ""
 
     if valor < 0:
@@ -79,33 +80,73 @@ def campo(valor: int, bits: int) -> str:
     while len(resultado) < bits:
         resultado = "0" + resultado
 
+    if len(resultado) > bits:
+        raise ValueError(
+            f"valor {original} nao cabe em {bits} bits "
+            f"(precisaria de {len(resultado)})"
+        )
+
     return resultado
 
 
-def codifica_r(mnem: str, args: list) -> int:
-    """add/sub/and/or/slt/... -> 32 bits.
+def codifica_r(mnem: str, args: list) -> str:
+    """Formato R -> string de 32 bits.
 
-    Cuidado: a ordem no assembly é  rd, rs, rt.
-    A ordem nos campos é           rs, rt, rd.
-    As instruções de shift (sll/srl) fogem do padrão: usam shamt e não rs.
+        op(6)  rs(5)  rt(5)  rd(5)  shamt(5)  funct(6)
+
+    Tres formas de escrita caem no formato R, e cada uma preenche os campos
+    de um jeito diferente. O op e sempre 0: e o funct que desempata.
     """
-    raise NotImplementedError("TODO: implementar")
+    if mnem == 'jr':                        # jr $rs
+        rs, rt, rd, shamt = REGS[args[0]], 0, 0, 0
+    elif mnem in ('sll', 'srl', 'sra'):     # sll $rd, $rt, shamt (nao tem rs)
+        rs, rt, rd, shamt = 0, REGS[args[1]], REGS[args[0]], int(args[2])
+    else:                                   # add $rd, $rs, $rt
+        rs, rt, rd, shamt = REGS[args[1]], REGS[args[2]], REGS[args[0]], 0
+
+    return (campo(0, 6) + campo(rs, 5) + campo(rt, 5)
+            + campo(rd, 5) + campo(shamt, 5) + campo(FUNCT[mnem], 6))
 
 
-def codifica_i(mnem: str, args: list, pc: int, rotulos: dict) -> int:
-    """addi/lw/sw/beq/... -> 32 bits.
+def codifica_i(mnem: str, args: list, pc: int, rotulos: dict) -> str:
+    """Formato I -> string de 32 bits.
 
-    lw/sw têm sintaxe própria:  lw $t0, 8($a0)
-    beq/bne têm imediato relativo ao PC, não absoluto: o valor gravado é
-    quantas *instruções* pular a partir da próxima. Descobrir a fórmula exata
-    é parte do trabalho.
+        op(6)  rs(5)  rt(5)  imediato(16)
+
+    Cuidado com a posicao dos registradores: no addi o args[0] e o destino
+    (rt); no beq o args[0] e o rs. Mesma posicao no texto, campo diferente.
+
+    O imediato do beq/bne e relativo ao PC e contado em INSTRUCOES, nao em
+    bytes: `(alvo - (pc + 4)) // 4`. O `pc + 4` porque o hardware ja
+    incrementou o PC quando o desvio e resolvido; o `// 4` porque contar
+    instrucoes multiplica por 4 o alcance do campo.
     """
-    raise NotImplementedError("TODO: implementar")
+    if mnem in ('beq', 'bne'):              # beq $rs, $rt, rotulo
+        rs, rt = REGS[args[0]], REGS[args[1]]
+        imm = (rotulos[args[2]] - (pc + 4)) // 4
+    elif mnem in ('lw', 'sw'):              # lw $rt, imm($rs)
+        rt = REGS[args[0]]
+        deslocamento, base = args[1].split('(')
+        imm, rs = int(deslocamento), REGS[base.rstrip(')')]
+    else:                                   # addi $rt, $rs, imm
+        rt, rs, imm = REGS[args[0]], REGS[args[1]], int(args[2])
+
+    if not -32768 <= imm <= 32767:      # 16 bits com sinal
+        raise ValueError(f"{mnem}: imediato {imm} nao cabe em 16 bits com sinal")
+
+    return campo(OPCODE[mnem], 6) + campo(rs, 5) + campo(rt, 5) + campo(imm, 16)
 
 
-def codifica_j(mnem: str, args: list, rotulos: dict) -> int:
-    """j/jal -> 32 bits."""
-    raise NotImplementedError("TODO: implementar")
+def codifica_j(mnem: str, args: list, rotulos: dict) -> str:
+    """Formato J (j/jal) -> string de 32 bits.
+
+        op(6)  endereco(26)
+
+    O campo guarda o endereco alvo dividido por 4. Toda instrucao esta
+    alinhada em 4 bytes, entao os dois bits de baixo sao sempre zero e
+    guarda-los seria desperdicio — o hardware os recoloca no salto.
+    """
+    return campo(OPCODE[mnem], 6) + campo(rotulos[args[0]] // 4, 26)
 
 
 # --- leitura do .asm --------------------------------------------------------
@@ -122,12 +163,46 @@ def primeira_passagem(linhas: list) -> dict:
     que aparece depois dele no arquivo. Na primeira passagem ainda não se sabe
     o endereço; na segunda, sim.
     """
-    raise NotImplementedError("TODO: implementar")
+    rotulos, endereco = {}, 0
+    for linha in linhas:
+        linha = limpa(linha)
+        while ':' in linha:                 # "sort:" ou "sort: addi ..."
+            rotulo, _, resto = linha.partition(':')
+            rotulos[rotulo.strip()] = endereco
+            linha = resto.strip()
+        if linha:                           # sobrou instrucao nesta linha
+            endereco += 4
+    return rotulos
 
 
 def monta(caminho_asm: str) -> list:
     """Retorna a lista de palavras de 32 bits do programa."""
-    raise NotImplementedError("TODO: implementar")
+    linhas = open(caminho_asm, encoding='utf-8').readlines()
+    rotulos = primeira_passagem(linhas)
+
+    palavras, pc = [], 0
+    for linha in linhas:
+        linha = limpa(linha)
+        while ':' in linha:
+            linha = linha.partition(':')[2].strip()
+        if not linha:
+            continue
+
+        mnem, _, resto = linha.partition(' ')
+        mnem = mnem.lower()
+        args = [a.strip() for a in resto.split(',') if a.strip()]
+
+        if mnem in FUNCT:                   # formato R (inclui jr)
+            palavras.append(codifica_r(mnem, args))
+        elif mnem in ('j', 'jal'):          # formato J
+            palavras.append(codifica_j(mnem, args, rotulos))
+        elif mnem in OPCODE:                # formato I
+            palavras.append(codifica_i(mnem, args, pc, rotulos))
+        else:
+            raise ValueError(f"instrucao desconhecida: {mnem!r}")
+        pc += 4
+
+    return palavras
 
 
 # --- saída .mif -------------------------------------------------------------
@@ -147,7 +222,24 @@ def escreve_mif(palavras: list, caminho: str, profundidade: int = 256) -> None:
             [0A..FF] : 00000000000000000000000000000000;
         END;
     """
-    raise NotImplementedError("TODO: implementar")
+    if len(palavras) > profundidade:
+        raise ValueError(
+            f"{len(palavras)} instrucoes nao cabem em memoria de "
+            f"{profundidade} palavras"
+        )
+
+    with open(caminho, 'w', encoding='utf-8') as saida:
+        saida.write(f"DEPTH = {profundidade};\n")
+        saida.write("WIDTH = 32;\n")
+        saida.write("ADDRESS_RADIX = HEX;\n")
+        saida.write("DATA_RADIX = BIN;\n")
+        saida.write("CONTENT BEGIN\n")
+        for endereco, bits in enumerate(palavras):
+            saida.write(f"    {endereco:02X} : {bits};\n")
+        if len(palavras) < profundidade:    # resto da memoria zerado
+            saida.write(f"    [{len(palavras):02X}..{profundidade - 1:02X}] : "
+                        f"{'0' * 32};\n")
+        saida.write("END;\n")
 
 
 def main() -> int:
