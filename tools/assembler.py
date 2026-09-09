@@ -99,7 +99,7 @@ def codifica_r(mnem: str, args: list) -> str:
     """
     if mnem == 'jr':                        # jr $rs
         rs, rt, rd, shamt = REGS[args[0]], 0, 0, 0
-    elif mnem in ('sll', 'srl', 'sra'):     # sll $rd, $rt, shamt (nao tem rs)
+    elif mnem in ('sll', 'srl', 'sra'):     # sll $rd, $rt, shamt
         rs, rt, rd, shamt = 0, REGS[args[1]], REGS[args[0]], int(args[2])
     else:                                   # add $rd, $rs, $rt
         rs, rt, rd, shamt = REGS[args[1]], REGS[args[2]], REGS[args[0]], 0

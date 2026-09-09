@@ -119,6 +119,7 @@ main:
         # academico com bancos separados). Confirmem isso com quem for
         # implementar o bloco de memoria de dados — se o endereçamento for
         # diferente, so muda o valor do primeiro addi abaixo.
+        addi $sp, $zero, 1024
         addi $a0, $zero, 0    # $a0 = endereco-base do vetor
 
         addi $t0, $zero, 5
