@@ -65,7 +65,21 @@ def campo(valor: int, bits: int) -> str:
     É a operação que todo o resto usa. Precisa tratar valor negativo em
     complemento de dois (o imediato de beq/addi pode ser negativo).
     """
-    raise NotImplementedError("TODO: implementar")
+    resultado: str = ""
+
+    if valor < 0:
+        valor = (1 << bits) + valor  # complemento de dois
+
+    while valor > 0:
+        resultado += str(valor % 2)
+        valor //= 2
+
+    resultado = resultado[::-1]  # inverter a string
+    # Preencher com zeros à esquerda se necessário
+    while len(resultado) < bits:
+        resultado = "0" + resultado
+
+    return resultado
 
 
 def codifica_r(mnem: str, args: list) -> int:
