@@ -57,6 +57,49 @@ diferenças são pontuais e são o que caracteriza esta entrega:
 | `jr` | entrada adicional no mux do PC, vinda da saída 1 do banco de registradores |
 | `sll` | mux na entrada A da ALU para injetar `shamt` no lugar do registrador |
 
+## O que é RTL (e por que a pasta se chama assim)
+
+RTL é sigla de *Register Transfer Level* — nível de transferência entre
+registradores. É o modo de descrever hardware digital: em vez de desenhar
+porta lógica por porta lógica, você declara **o que cada registrador recebe a
+cada borda de clock** e **como os sinais combinacionais estão ligados entre
+si**. A ferramenta de síntese (Quartus) traduz essa descrição nas portas e
+conexões reais que vão existir dentro da FPGA.
+
+A diferença que mais confunde quem vem de C ou Python: **Verilog não é uma
+linguagem de programação.** O arquivo não é executado de cima para baixo.
+Cada construção descreve um pedaço de circuito que existe o tempo todo, em
+paralelo com todos os outros:
+
+```verilog
+assign soma = a + b;     // um somador FISICO, permanentemente ligado.
+                         // mudou `a`, `soma` muda junto — ninguem "chama" nada
+
+always @(posedge clk)    // um REGISTRADOR: captura o valor na subida do clock
+    pc <= proximo_pc;    // e o segura ate a proxima subida
+```
+
+Três módulos declarados num projeto são três circuitos funcionando
+simultaneamente, não três funções esperando para serem chamadas. É por isso
+que a ordem dos arquivos e a ordem das linhas dentro de um `always` combinacional
+não mudam o comportamento do hardware.
+
+No repositório a divisão é esta:
+
+| pasta | o que contém | vai para a FPGA? |
+|---|---|---|
+| `rtl/` | o processador em si — um `.v` por bloco funcional | **sim**, é sintetizado |
+| `tb/` | testbenches: circuitos de mentira que aplicam entradas e conferem saídas | não, só simulação |
+
+Por isso o testbench pode usar `$display`, `$readmemb` e `#10` (esperar 10
+unidades de tempo): são comandos do **simulador**, não existem como hardware.
+Se aparecerem dentro de um módulo de `rtl/`, a síntese ignora ou acusa erro.
+
+**Parametrizado** (exigência 4 da rubrica) significa: `parameter LARGURA = 32`
+no topo do módulo e `[LARGURA-1:0]` no corpo, em vez de `[31:0]` escrito na
+mão em vinte lugares. Mudar a largura do processador passa a ser mudar um
+número.
+
 ## Divisão do trabalho
 
 A divisão da 1ª entrega dava à Pessoa C "pipeline, hazards e integração" —
@@ -69,9 +112,59 @@ até 09/10:
 | **B** (Ana C. E. Freire) — ULA e controle | ALU parametrizada · ALU control · unidade de controle (12 instruções) · somador de desvio e lógica de branch |
 | **C** — jumps, integração e síntese | lógica de `j`/`jal`/`jr` e muxes do PC · muxes de escrita no banco · top-level · testbench do processador completo · projeto Quartus e síntese |
 
-Quem ocupa os papéis A e C precisa ser decidido imediatamente — o relatório
-da 1ª entrega deixou isso em aberto "até o início da 2ª etapa", e a etapa
-começou.
+### Restrição de plataforma: Quartus não roda em macOS
+
+O Quartus Prime é publicado apenas para Windows e Linux. Não existe versão
+para macOS — nem Intel, nem Apple Silicon. Consequência direta para a
+divisão: **quem estiver em Mac não consegue sintetizar, atribuir pinos nem
+gravar a FPGA.**
+
+Isso não tira ninguém do RTL. Simulação funciona no Mac, e é onde está a
+maior parte do trabalho desta entrega (rubricas 2, 3 e 4). Toolchain
+verificada em 29/09/2026, em MacBook Apple Silicon:
+
+```bash
+brew install icarus-verilog                          # simulador, versão 13.0
+
+iverilog -g2012 -o sim rtl/modulo.v tb/modulo_tb.v   # compila
+./sim                                                # roda
+```
+
+Validado de ponta a ponta com uma memória de instruções parametrizada lendo
+o `mem/programa.txt` gerado pelo nosso montador:
+
+```
+  ok   j main:          end=0  -> 00001000000000000000000000101010
+  ok   sll $t1,$a1,2:   end=4  -> 00000000000001010100100010000000
+  ok   add $t1,$a0,$t1: end=8  -> 00000000100010010100100000100000
+  ok   jr $ra:          end=28 -> 00000011111000000000000000001000
+  TODOS OS CASOS PASSARAM
+```
+
+O Icarus também gera forma de onda: `$dumpfile("nome.vcd")` e `$dumpvars(0,
+tb)` no testbench produzem um `.vcd` que abre no GTKWave ou no Surfer.
+
+Fluxo prático da equipe: **todo o RTL é escrito e validado em simulação
+(qualquer sistema operacional), e só a síntese exige Quartus** — feita por
+quem estiver em Windows ou Linux, a partir dos mesmos arquivos do repositório.
+
+### Papéis fechados
+
+- **Jaide — Pessoa A (memória e registradores) + verificação.** Cartões 1 a
+  5 e 16. Todos são RTL puro mais testbench, sem nenhuma dependência de
+  Quartus, o que resolve a restrição de plataforma acima. O banco de
+  registradores é dependência dos testbenches de quase todo mundo, então
+  começar por ele destrava a equipe.
+- **Ana Clara — Pessoa B (ULA e controle).** Cartões 6 a 9. Também 100%
+  simulável; Quartus só é necessário na integração final.
+- **Manuela — Pessoa C (jumps, integração e síntese).** Cartões 10 a 15.
+  Este papel **exige Windows ou Linux** por causa dos cartões 14 e 15
+  (top-level no Quartus, pinagem e síntese).
+
+Se a Manuela também estiver em macOS, as opções são: usar uma máquina do
+laboratório da disciplina, ou instalar o Quartus numa máquina virtual Linux
+(UTM ou Parallels). Nesse caso, decidir isso agora — não na semana da
+entrega.
 
 ## Cartões do Trello
 
@@ -155,6 +248,15 @@ Datas antes do prazo real, para que a integração não caia na véspera:
 linha, que é o que `$readmemb` entende no testbench. São os mesmos 63 bits ×
 63 linhas em embalagens diferentes — alterou o `.asm`, rode o montador e
 commite os três arquivos juntos.
+
+**Memória não preenchida lê `x`, não zero.** O `$readmemb` carrega apenas as
+63 palavras do programa; o resto do array fica em `x` (indefinido) na
+simulação. Se o PC passar do fim do programa, a instrução lida vira
+`xxxxxxxx...` e o X se espalha por todo o datapath — todos os sinais viram
+`x` e o testbench não mostra nada útil. O `j end` no final do `programa.asm`
+existe justamente para o PC nunca chegar lá. O aviso do Icarus
+`Not enough words in the file for the requested range [0:255]` é esperado e
+não é erro.
 
 **Tamanho da memória de dados.** O `main` inicializa `$sp` em 1024, e o vetor
 de teste ocupa os endereços 0 a 31. A memória de dados precisa ter pelo menos
