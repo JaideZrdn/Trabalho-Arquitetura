@@ -242,13 +242,30 @@ def escreve_mif(palavras: list, caminho: str, profundidade: int = 256) -> None:
         saida.write("END;\n")
 
 
+def escreve_readmemb(palavras: list, caminho: str) -> None:
+    """Uma palavra binária por linha, sem cabeçalho nenhum.
+
+    O .mif é o formato da IP de memória do Quartus. O $readmemb do Verilog,
+    usado pelos testbenches no ModelSim, não entende DEPTH/CONTENT/END — ele
+    espera texto puro. São os mesmos bits, em duas embalagens.
+    """
+    with open(caminho, 'w', encoding='utf-8') as saida:
+        for bits in palavras:
+            saida.write(bits + "\n")
+
+
 def main() -> int:
     if len(sys.argv) != 3:
         print(__doc__.strip().splitlines()[2])
         return 1
     palavras = monta(sys.argv[1])
     escreve_mif(palavras, sys.argv[2])
-    print(f"{len(palavras)} instruções -> {sys.argv[2]}")
+
+    # mesma memória, formato que o testbench consegue ler
+    caminho_txt = sys.argv[2].rsplit('.', 1)[0] + '.txt'
+    escreve_readmemb(palavras, caminho_txt)
+
+    print(f"{len(palavras)} instruções -> {sys.argv[2]} e {caminho_txt}")
     return 0
 
 
