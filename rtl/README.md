@@ -26,7 +26,7 @@ aprender o ciclo de trabalho sem que a lógica atrapalhe.
 | # | módulo | objetivo | tipo | estado |
 |---|---|---|---|---|
 | 1 | `extensor_sinal` | esticar o imediato de 16 para 32 bits preservando o valor com sinal | combinacional | **pronto** |
-| 2 | `pc` | guardar o endereço da instrução atual e atualizá-lo a cada ciclo | **sequencial** | a fazer |
+| 2 | `pc` | guardar o endereço da instrução atual e atualizá-lo a cada ciclo | **sequencial** | **pronto** |
 | 3 | `banco_registradores` | armazenar os 32 registradores; duas leituras e uma escrita por ciclo; `$zero` sempre 0 | sequencial na escrita, combinacional na leitura | a fazer |
 | 4 | `memoria_instrucoes` | entregar a instrução de 32 bits do endereço apontado pelo PC; carrega `mem/programa.txt` | combinacional (ROM) | a fazer |
 | 5 | `memoria_dados` | ler e escrever palavras de 32 bits; usada por `lw` e `sw` | sequencial na escrita | a fazer |
