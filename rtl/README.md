@@ -9,9 +9,17 @@ largura literal no corpo. É exigência 4 da rubrica da 2ª entrega.
 
 ## Como compilar e simular
 
+Um módulo por vez:
+
 ```bash
 iverilog -g2012 -o build/sim rtl/<modulo>.v tb/<modulo>_tb.v
 ./build/sim
+```
+
+Todos de uma vez (rodar da raiz do repositório):
+
+```bash
+./tools/roda_testes.sh
 ```
 
 Funciona em macOS, Linux e Windows (`brew install icarus-verilog` no Mac). O
@@ -27,9 +35,9 @@ aprender o ciclo de trabalho sem que a lógica atrapalhe.
 |---|---|---|---|---|
 | 1 | `extensor_sinal` | esticar o imediato de 16 para 32 bits preservando o valor com sinal | combinacional | **pronto** |
 | 2 | `pc` | guardar o endereço da instrução atual e atualizá-lo a cada ciclo | **sequencial** | **pronto** |
-| 3 | `banco_registradores` | armazenar os 32 registradores; duas leituras e uma escrita por ciclo; `$zero` sempre 0 | sequencial na escrita, combinacional na leitura | a fazer |
-| 4 | `memoria_instrucoes` | entregar a instrução de 32 bits do endereço apontado pelo PC; carrega `mem/programa.txt` | combinacional (ROM) | a fazer |
-| 5 | `memoria_dados` | ler e escrever palavras de 32 bits; usada por `lw` e `sw` | sequencial na escrita | a fazer |
+| 3 | `banco_registradores` | armazenar os 32 registradores; duas leituras e uma escrita por ciclo; `$zero` sempre 0 | sequencial na escrita, combinacional na leitura | **pronto** |
+| 4 | `memoria_instrucoes` | entregar a instrução de 32 bits do endereço apontado pelo PC; carrega `mem/programa.txt` | combinacional (ROM) | **pronto** |
+| 5 | `memoria_dados` | ler e escrever palavras de 32 bits; usada por `lw` e `sw` | sequencial na escrita | **pronto** |
 
 **Requisito do módulo 5:** a memória de dados precisa de no mínimo 256
 palavras. O `main` do programa inicializa `$sp` em 1024 e o vetor de teste
