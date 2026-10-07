@@ -10,9 +10,10 @@
 #    make mif        regera mem/programa.mif e mem/programa.txt do assembly
 #    make clean      apaga build/
 #
-#  Descobre os modulos sozinho: para cada rtl/<nome>.v procura o testbench em
-#  tb/<nome>_tb.v ou tb/tb_<nome>_scenarios.v (as duas convencoes em uso na
-#  equipe). Modulo sem testbench e listado como pendente, nao como falha.
+#  Descobre os modulos sozinho, em rtl/ (processador) e fpga/ (invólucro de
+#  placa). Para cada <nome>.v procura o testbench em tb/<nome>_tb.v,
+#  tb/tb_<nome>_scenarios.v ou fpga/tb/<nome>_tb.v. Modulo sem testbench e
+#  listado como pendente, nao como falha.
 #
 #  Requer Icarus Verilog:  brew install icarus-verilog  (macOS)
 #                          apt install iverilog         (Linux)
@@ -23,11 +24,25 @@ FLAGS    := -g2012
 BUILD    := build
 STATUS   := $(BUILD)/status
 
-RTL      := $(wildcard rtl/*.v)
+# rtl/  = o processador em si        fpga/ = invólucro de placa (DE2-115)
+RTL_CPU  := $(wildcard rtl/*.v)
+RTL_FPGA := $(wildcard fpga/*.v)
+RTL      := $(RTL_CPU) $(RTL_FPGA)
 MODULOS  := $(sort $(basename $(notdir $(RTL))))
 
-# caminho do testbench de um modulo, nas duas convencoes de nome
-tb_de = $(firstword $(wildcard tb/$(1)_tb.v tb/tb_$(1)_scenarios.v))
+# caminho do testbench de um modulo, nas convencoes de nome em uso
+tb_de = $(firstword $(wildcard tb/$(1)_tb.v tb/tb_$(1)_scenarios.v fpga/tb/$(1)_tb.v))
+
+# fontes a compilar: modulo de fpga/ precisa de tudo; modulo do processador
+# compila so o processador, para que o involucro de placa (e o caminho de
+# arquivo que ele assume) nao interfira nos testes do core
+fontes_de = $(if $(wildcard fpga/$(1).v),$(RTL),$(RTL_CPU))
+
+# O nome do modulo de testbench e lido DO ARQUIVO, nao deduzido do nome dele:
+# nem sempre coincidem. Ele e passado ao iverilog com -s para fixar a raiz da
+# elaboracao — sem isso, todo modulo nao instanciado vira raiz tambem, e o
+# de2_115_top acaba sendo elaborado em testes que nao sao dele, procurando o
+# programa pelo caminho relativo da placa.
 
 COM_TB = $(foreach m,$(MODULOS),$(if $(call tb_de,$(m)),$(m)))
 SEM_TB = $(foreach m,$(MODULOS),$(if $(call tb_de,$(m)),,$(m)))
@@ -57,7 +72,8 @@ run-%: force
 	@mkdir -p $(BUILD) $(STATUS)
 	@tb="$(call tb_de,$*)"; \
 	 if [ -z "$$tb" ]; then printf '  %-10s %s\n' "pendente" "$*  (sem testbench)"; exit 0; fi; \
-	 if ! $(IVERILOG) $(FLAGS) -o $(BUILD)/sim_$* $(RTL) $$tb 2>$(BUILD)/$*.log; then \
+	 raiz=$$(grep -m1 -oE '^[[:space:]]*module[[:space:]]+[A-Za-z_][A-Za-z0-9_]*' $$tb | awk '{print $$2}'); \
+	 if ! $(IVERILOG) $(FLAGS) -s $$raiz -o $(BUILD)/sim_$* $(call fontes_de,$*) $$tb 2>$(BUILD)/$*.log; then \
 	    printf '  %-10s %-24s %s\n' "COMPILA!" "$*" "veja $(BUILD)/$*.log"; \
 	    touch $(STATUS)/$*.falha; exit 0; fi; \
 	 saida=$$(./$(BUILD)/sim_$* 2>&1); \
