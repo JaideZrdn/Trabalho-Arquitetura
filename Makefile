@@ -57,7 +57,7 @@ run-%: force
 	@mkdir -p $(BUILD) $(STATUS)
 	@tb="$(call tb_de,$*)"; \
 	 if [ -z "$$tb" ]; then printf '  %-10s %s\n' "pendente" "$*  (sem testbench)"; exit 0; fi; \
-	 if ! $(IVERILOG) $(FLAGS) -o $(BUILD)/sim_$* rtl/$*.v $$tb 2>$(BUILD)/$*.log; then \
+	 if ! $(IVERILOG) $(FLAGS) -o $(BUILD)/sim_$* $(RTL) $$tb 2>$(BUILD)/$*.log; then \
 	    printf '  %-10s %-24s %s\n' "COMPILA!" "$*" "veja $(BUILD)/$*.log"; \
 	    touch $(STATUS)/$*.falha; exit 0; fi; \
 	 saida=$$(./$(BUILD)/sim_$* 2>&1); \
@@ -79,13 +79,10 @@ run-%: force
 	 fi
 
 lint:
-	@erros=0; for m in $(MODULOS); do \
-	   if $(IVERILOG) $(FLAGS) -t null rtl/$$m.v 2>$(BUILD)/lint.log; then \
-	      printf '  %-10s %s\n' "ok" "$$m"; \
-	   else printf '  %-10s %s\n' "ERRO" "$$m"; sed 's/^/             /' $(BUILD)/lint.log; \
-	      erros=$$((erros+1)); fi; \
-	 done; \
-	 echo ""; [ $$erros -eq 0 ] && echo "$(words $(MODULOS)) modulo(s), sintaxe ok" || { echo "$$erros com erro"; exit 1; }
+	@mkdir -p $(BUILD)
+	@if $(IVERILOG) $(FLAGS) -t null $(RTL) 2>$(BUILD)/lint.log; then \
+	    echo "$(words $(MODULOS)) modulo(s) elaboram sem erro"; \
+	 else sed 's/^/  /' $(BUILD)/lint.log; exit 1; fi
 
 mif:
 	@python3 tools/assembler.py mem/programa.asm mem/programa.mif

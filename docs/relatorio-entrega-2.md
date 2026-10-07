@@ -184,6 +184,11 @@ integração.
 | `mux_write_reg` | seleciona `rt`, `rd` ou `$ra` como destino | combinacional | conferência visual |
 | `mux_write_data` | seleciona ALU, memória ou PC+4 como dado escrito | combinacional | conferência visual |
 | `jump_address_calc` | monta o endereço de salto do formato J | combinacional | conferência visual |
+| `alu` | operações aritméticas e lógicas; gera o sinal `zero` | combinacional | 15 casos |
+| `alu_control` | decodifica `alu_op` + `funct` na operação da ALU | combinacional | 10 casos |
+| `control_unit` | emite todos os sinais de controle a partir do opcode | combinacional | 15 casos |
+| `shift_left_2` | multiplica por 4 o imediato do desvio | combinacional | 6 casos |
+| **`mips_monociclo`** | **top-level: instancia os dezesseis blocos e liga a fiação** | — | **12 casos** |
 
 ### Decisões de projeto que valem registro
 
@@ -235,7 +240,7 @@ para confirmar que a escrita é descartada.
 Estado atual da verificação:
 
 ```
-16 módulos com testbench, 109 casos, todos aprovados
+17 módulos com testbench, 121 casos, todos aprovados
 ```
 
 Cinco testbenches — os dos multiplexadores e do `jump_address_calc` — imprimem
@@ -266,26 +271,64 @@ documentação do módulo deve registrar isso.
 
 ## VII. Estado atual e pendências
 
-**Concluído:** doze módulos do caminho de dados implementados; sete com
-testbench aprovado; contrato de sinais de controle documentado; ambiente de
+**Concluído:** dezessete módulos implementados, incluindo o top-level; todos
+com testbench aprovado, somando 121 casos; contrato de sinais de controle
+documentado e verificado instrução a instrução; processador completo
+executando o programa de ordenação corretamente em simulação; ambiente de
 simulação funcionando nas três máquinas da equipe.
 
 **Pendente:**
 
 | item | responsável | rubrica |
 |---|---|---|
-| ALU parametrizada e ALU control | B | 2 |
-| Unidade de controle (tabela das 12 instruções) | B | 2 |
-| Lógica de desvio (`Zero` → `pc_src`) e deslocamento do imediato | B | 2 |
-| Testbenches dos cinco módulos restantes | C | 3 |
-| Integração no top-level | C | 2 |
-| Testbench do processador completo executando `mem/programa.txt` | C | 3 |
-| Projeto Quartus, versão confirmada e síntese | C | 1 |
+| Projeto Quartus, versão confirmada e síntese na DE2-115 | C | 1 |
 | Vídeo da apresentação no YouTube | equipe | 5 |
+| Converter os cinco testbenches de conferência visual em auto-verificáveis | C | 3 |
 
-*(pendente: VIII. Resultados — a ser escrita quando o processador completo
-executar o programa de ordenação em simulação, comparando o vetor resultante
-com a saída esperada `{1,2,3,4,5,7,8,9}`.)*
+## VIII. Resultados
+
+O processador completo foi integrado e executa o programa de ordenação em
+simulação. O testbench `tb/mips_monociclo_tb.v` carrega `mem/programa.txt` na
+memória de instruções, libera o reset e deixa o processador executar até
+parar sozinho no laço `j end`, conferindo em seguida o conteúdo da memória de
+dados.
+
+```
+== processador completo executando mem/programa.txt ==
+   vetor inicial : 5 3 8 1 9 2 7 4
+  ok    reset: PC = 0
+  ok    parou no halt depois de 406 ciclos, PC = 248
+   vetor final   : 1 2 3 4 5 7 8 9
+   esperado      : 1 2 3 4 5 7 8 9
+  ok    $sp restaurado em 1024 ao final do sort
+  ok    $zero permanece 0
+RESULTADO: todos os casos passaram
+```
+
+Três observações sobre o resultado:
+
+**O vetor é ordenado corretamente**, satisfazendo o critério objetivo de
+sucesso definido no relatório da primeira entrega.
+
+**A contagem de ciclos confere com a previsão.** Antes de o hardware existir,
+o binário gerado pelo montador foi executado por um interpretador que
+reproduz o ciclo de busca-decodificação-execução, resultando em 404
+instruções. O processador em Verilog parou em 406 ciclos — as duas unidades
+adicionais correspondem ao ciclo de reset e ao ciclo em que a repetição do PC
+é detectada. A coincidência entre as duas contagens, obtidas por caminhos
+independentes, é evidência forte de que o caminho de dados executa exatamente
+o programa especificado.
+
+**O estado da máquina ao final está consistente.** O `$sp` retorna a 1024,
+confirmando que o epílogo de `sort()` restaurou a pilha corretamente, e o
+`$zero` permanece nulo, confirmando que a proteção por hardware do registrador
+0 resistiu a todas as instruções executadas.
+
+A verificação do processador completo é qualitativamente diferente da
+verificação dos módulos isolados: os testbenches de módulo provam que cada
+peça funciona sozinha, enquanto este prova que a **fiação entre elas** está
+correta. Um único sinal trocado no top-level produziria um vetor desordenado,
+mesmo com todos os módulos individualmente aprovados.
 
 ---
 

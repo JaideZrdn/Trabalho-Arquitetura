@@ -46,6 +46,12 @@ aprender o ciclo de trabalho sem que a lógica atrapalhe.
 palavras. O `main` do programa inicializa `$sp` em 1024 e o vetor de teste
 ocupa os endereços 0 a 31 — memória menor faz a pilha colidir com o vetor.
 
+## Top-level
+
+`mips_monociclo.v` instancia os dezesseis blocos e liga a fiação, sem lógica
+própria. Verificado por `tb/mips_monociclo_tb.v`, que executa
+`mem/programa.txt` e confere o vetor ordenado na memória de dados.
+
 ## Blocos das outras pessoas
 
 - **Pessoa B (Ana):** ALU parametrizada, ALU control, unidade de controle,
