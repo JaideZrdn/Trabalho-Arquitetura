@@ -84,11 +84,12 @@ dos mesmos arquivos do repositório.
 Comando único de verificação, a partir da raiz do repositório:
 
 ```bash
-./tools/roda_testes.sh
+make
 ```
 
-O script percorre `rtl/`, compila cada módulo com seu testbench
-correspondente em `tb/` e reporta o número de casos aprovados.
+O Makefile descobre os módulos automaticamente: para cada `rtl/<nome>.v`
+procura o testbench correspondente em `tb/`, compila, executa e reporta o
+número de casos aprovados, encerrando com código de erro se algum falhar.
 
 *(pendente: confirmar a versão exata do Quartus Prime instalada no
 laboratório — exigência 1 da rubrica.)*
@@ -178,11 +179,11 @@ integração.
 | `extensor_sinal` | estende o imediato de 16 para 32 bits com sinal | combinacional | 12 casos |
 | `memoria_dados` | leitura e escrita de palavras, para `lw` e `sw` | misto | 11 casos |
 | `mux_alu_b` | seleciona registrador ou imediato na entrada B da ALU | combinacional | 6 casos |
-| `mux_alu_a` | seleciona registrador ou `shamt` na entrada A | combinacional | *(pendente)* |
-| `mux_pc` | seleciona PC+4, desvio, salto ou `jr` | combinacional | *(pendente)* |
-| `mux_write_reg` | seleciona `rt`, `rd` ou `$ra` como destino | combinacional | *(pendente)* |
-| `mux_write_data` | seleciona ALU, memória ou PC+4 como dado escrito | combinacional | *(pendente)* |
-| `jump_address_calc` | monta o endereço de salto do formato J | combinacional | *(pendente)* |
+| `mux_alu_a` | seleciona registrador ou `shamt` na entrada A | combinacional | conferência visual |
+| `mux_pc` | seleciona PC+4, desvio, salto ou `jr` | combinacional | conferência visual |
+| `mux_write_reg` | seleciona `rt`, `rd` ou `$ra` como destino | combinacional | conferência visual |
+| `mux_write_data` | seleciona ALU, memória ou PC+4 como dado escrito | combinacional | conferência visual |
+| `jump_address_calc` | monta o endereço de salto do formato J | combinacional | conferência visual |
 
 ### Decisões de projeto que valem registro
 
@@ -234,9 +235,13 @@ para confirmar que a escrita é descartada.
 Estado atual da verificação:
 
 ```
-7 módulos com testbench, 63 casos, todos aprovados
-5 módulos ainda sem testbench
+16 módulos com testbench, 109 casos, todos aprovados
 ```
+
+Cinco testbenches — os dos multiplexadores e do `jump_address_calc` — imprimem
+valor esperado e obtido lado a lado para conferência visual, sem contagem
+automática de erros. O Makefile os marca com `ok*` para distinguir dos que se
+auto-verificam.
 
 ---
 

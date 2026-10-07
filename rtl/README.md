@@ -19,7 +19,10 @@ iverilog -g2012 -o build/sim rtl/<modulo>.v tb/<modulo>_tb.v
 Todos de uma vez (rodar da raiz do repositório):
 
 ```bash
-./tools/roda_testes.sh
+make            # compila e roda todos os testbenches, com resumo
+make run-alu    # só um módulo
+make lint       # só confere a sintaxe de todos os módulos
+make clean      # apaga build/
 ```
 
 Funciona em macOS, Linux e Windows (`brew install icarus-verilog` no Mac). O
