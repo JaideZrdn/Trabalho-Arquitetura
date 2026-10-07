@@ -40,43 +40,68 @@ Os valores abaixo foram **lidos do código já commitado**, não decididos aqui.
 Nos dois casos, `0` significa "este ciclo não escreve". O banco de
 registradores ignora escrita no registrador 0 mesmo com `escreve_reg = 1`.
 
-## Ainda a definir — unidade de controle e ALU control (Pessoa B)
+## Operação da ALU
 
-Estes sinais ainda não existem em código, então a codificação é livre. Assim
-que forem escritos, acrescentar aqui:
+Definida em `rtl/alu.v` e decodificada por `rtl/alu_control.v`.
 
-- operação da ALU (`alu_control`): quais códigos para somar, subtrair, AND,
-  OR e `slt`
-- seleção de desvio: como distinguir `beq` de `bne` a partir do sinal `Zero`
-  da ALU, e como isso vira `pc_src = 01`
+| `alu_op` | significado | de onde vem a operação |
+|---|---|---|
+| `00` | ADD | `lw`, `sw`, `addi` — cálculo de endereço e soma com imediato |
+| `01` | SUB | `beq`, `bne` — a subtração é o que gera o sinal `zero` |
+| `10` | ver `funct` | instruções de formato R |
+| `11` | SLT | `slti` |
 
-## Tabela por instrução — a preencher
+Códigos emitidos pelo `alu_control` para a ALU:
 
-As doze instruções do `mem/programa.asm`. O preenchimento é decisão da
-unidade de controle (cartão 8) e vai aqui quando estiver definido.
+| código | operação |
+|---|---|
+| `0000` | AND |
+| `0001` | OR |
+| `0010` | ADD |
+| `0110` | SUB |
+| `0111` | SLT (comparação com sinal) |
+| `1000` | SLL (desloca a entrada B pela quantidade na entrada A) |
 
-| instrução | `pc_src` | `reg_dst` | `mem_to_reg` | `alu_src_a` | `alu_src_b` | `escreve_reg` | `escreve_mem` |
-|---|---|---|---|---|---|---|---|
-| `add` | | | | | | | |
-| `slt` | | | | | | | |
-| `sll` | | | | | | | |
-| `jr` | | | | | | | |
-| `addi` | | | | | | | |
-| `slti` | | | | | | | |
-| `lw` | | | | | | | |
-| `sw` | | | | | | | |
-| `beq` | | | | | | | |
-| `bne` | | | | | | | |
-| `j` | | | | | | | |
-| `jal` | | | | | | | |
+O `sll` depende da convenção fixada pelo `mux_alu_a`: o `shamt` entra pela
+entrada **A** e o valor do registrador pela entrada **B**. Por isso a operação
+é `b << a`, e não o contrário.
 
-Três linhas que costumam ser preenchidas errado, como alerta:
+## Decisão de desvio
 
-- **`sw`** não grava em registrador: `escreve_reg = 0`. O valor de `mem_to_reg`
-  é indiferente, mas vale fixar `00` para não deixar sinal solto.
-- **`jal`** grava em registrador **e** salta: `escreve_reg = 1`,
-  `reg_dst = 10`, `mem_to_reg = 10`, `pc_src = 10`.
-- **`jr`** não grava nada: só `pc_src = 11`.
+A unidade de controle recebe o sinal `zero` da ALU e resolve o `pc_src`
+internamente:
+
+```
+pc_src = 01   se   (beq e zero=1)  ou  (bne e zero=0)
+pc_src = valor base da instrução, caso contrário
+```
+
+Não há laço combinacional: `alu_op` não depende de `zero`; apenas `pc_src`
+depende.
+
+## Tabela por instrução
+
+Implementada em `rtl/control_unit.v` e verificada caso a caso em
+`tb/control_unit_tb.v`.
+
+| instrução | `pc_src` | `reg_dst` | `mem_to_reg` | `alu_src_a` | `alu_src_b` | `reg_write` | `mem_write` | `alu_op` |
+|---|---|---|---|---|---|---|---|---|
+| `add` | `00` | `01` | `00` | `0` | `0` | `1` | `0` | `10` |
+| `slt` | `00` | `01` | `00` | `0` | `0` | `1` | `0` | `10` |
+| `sll` | `00` | `01` | `00` | **`1`** | `0` | `1` | `0` | `10` |
+| `jr` | **`11`** | `00` | `00` | `0` | `0` | `0` | `0` | `00` |
+| `addi` | `00` | `00` | `00` | `0` | `1` | `1` | `0` | `00` |
+| `slti` | `00` | `00` | `00` | `0` | `1` | `1` | `0` | **`11`** |
+| `lw` | `00` | `00` | **`01`** | `0` | `1` | `1` | `0` | `00` |
+| `sw` | `00` | `00` | `00` | `0` | `1` | **`0`** | **`1`** | `00` |
+| `beq` | `01` se `zero=1`, senão `00` | `00` | `00` | `0` | `0` | `0` | `0` | `01` |
+| `bne` | `01` se `zero=0`, senão `00` | `00` | `00` | `0` | `0` | `0` | `0` | `01` |
+| `j` | **`10`** | `00` | `00` | `0` | `0` | `0` | `0` | `00` |
+| `jal` | **`10`** | **`10`** | **`10`** | `0` | `0` | `1` | `0` | `00` |
+
+Onde o valor é indiferente (por exemplo `mem_to_reg` durante um `sw`), a
+unidade de controle emite `0` em vez de deixar o sinal solto. Isso evita
+propagação de `x` na simulação e torna o comportamento determinístico.
 
 ## Pendência de nomenclatura
 
