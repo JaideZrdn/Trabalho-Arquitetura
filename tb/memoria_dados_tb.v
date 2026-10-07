@@ -14,15 +14,16 @@ module memoria_dados_tb;
 
     reg         clk = 0;
     reg         escreve_mem;
-    reg  [31:0] endereco, dado_escrita;
-    wire [31:0] dado_leitura;
+    reg  [31:0] endereco, dado_escrita, endereco_debug;
+    wire [31:0] dado_leitura, dado_debug;
 
     always #5 clk = ~clk;
 
     memoria_dados #(.LARGURA(32), .PROFUNDIDADE(256)) dut (
         .clk(clk), .escreve_mem(escreve_mem),
         .endereco(endereco), .dado_escrita(dado_escrita),
-        .dado_leitura(dado_leitura)
+        .dado_leitura(dado_leitura),
+        .endereco_debug(endereco_debug), .dado_debug(dado_debug)
     );
 
     integer erros = 0;
@@ -51,7 +52,7 @@ module memoria_dados_tb;
     initial begin
         $dumpfile("build/memoria_dados_tb.vcd");
         $dumpvars(0, memoria_dados_tb);
-        escreve_mem = 0;
+        escreve_mem = 0; endereco_debug = 0;
 
         $display("");
         $display("== memoria_dados ==");
@@ -88,6 +89,13 @@ module memoria_dados_tb;
         endereco = 8; dado_escrita = 32'hDEAD_BEEF; escreve_mem = 0;
         @(posedge clk); #1;
         lw(8, 8, "escreve_mem=0 nao altera a memoria");
+
+        endereco = 0; endereco_debug = 28; #1;
+        if (dado_debug !== 32'd4) begin
+            $display("  ERRO  porta de debug: end=28 deu %0d, esperado 4", $signed(dado_debug));
+            erros = erros + 1;
+        end else
+            $display("  ok    %-46s end=28 -> %0d", "porta de debug, endereco independente", $signed(dado_debug));
 
         $display("");
         if (erros == 0) $display("RESULTADO: todos os casos passaram");

@@ -35,10 +35,16 @@ module pc #(
     output reg  [LARGURA-1:0]  endereco_atual   // reg, porque guarda estado
 );
 
-    // Reset SINCRONO: so tem efeito na subida do clock, como todo o resto.
-    // Mantem a regra "tudo troca de valor no mesmo instante" valendo sem
-    // excecao, o que torna o circuito mais facil de raciocinar.
-    always @(posedge clk) begin
+    // Reset ASSINCRONO: age no instante em que o sinal sobe, sem esperar
+    // borda de clock.
+    //
+    // Por que nao sincrono: na placa o clock do processador e derivado — ou
+    // dividido para 1 Hz, ou gerado por um botao no modo passo-a-passo.
+    // Enquanto o reset esta apertado o clock pode simplesmente nao ter
+    // nenhuma borda, e um reset sincrono nunca chegaria a agir: o PC ficaria
+    // indefinido e todo o datapath propagaria x. Foi exatamente isso que o
+    // testbench do involucro de placa pegou.
+    always @(posedge clk or posedge reset) begin
         if (reset)
             endereco_atual <= ENDERECO_INICIAL;
         else

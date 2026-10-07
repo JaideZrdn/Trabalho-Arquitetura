@@ -32,7 +32,12 @@ module memoria_dados #(
     input  wire                escreve_mem,    // 1 durante um sw
     input  wire [LARGURA-1:0]  endereco,       // calculado pela ALU, em bytes
     input  wire [LARGURA-1:0]  dado_escrita,   // valor de rt, para o sw
-    output wire [LARGURA-1:0]  dado_leitura    // valor lido, para o lw
+    output wire [LARGURA-1:0]  dado_leitura,   // valor lido, para o lw
+    // porta de leitura independente, so para observacao externa (displays da
+    // FPGA). Nao interfere no processador: e um segundo ponto de leitura do
+    // mesmo array, com endereco proprio.
+    input  wire [LARGURA-1:0]  endereco_debug,
+    output wire [LARGURA-1:0]  dado_debug
 );
 
     localparam BITS_END = $clog2(PROFUNDIDADE);
@@ -49,6 +54,7 @@ module memoria_dados #(
     end
 
     assign dado_leitura = memoria[indice];
+    assign dado_debug   = memoria[endereco_debug[BITS_END+1:2]];
 
     always @(posedge clk) begin
         if (escreve_mem)

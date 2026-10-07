@@ -19,6 +19,8 @@ module mips_monociclo_tb;
     reg         clk = 0;
     reg         reset;
     wire [31:0] pc_debug, instrucao_debug;
+    reg  [31:0] endereco_debug = 0;
+    wire [31:0] dado_debug;
 
     always #5 clk = ~clk;          // periodo de 10ns
 
@@ -27,6 +29,7 @@ module mips_monociclo_tb;
         .ARQUIVO_PROGRAMA("mem/programa.txt")
     ) dut (
         .clk(clk), .reset(reset),
+        .endereco_debug(endereco_debug), .dado_debug(dado_debug),
         .pc_debug(pc_debug), .instrucao_debug(instrucao_debug)
     );
 

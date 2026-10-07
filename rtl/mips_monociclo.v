@@ -26,6 +26,9 @@ module mips_monociclo #(
 )(
     input  wire               clk,
     input  wire               reset,
+    // observacao externa da memoria de dados (displays da placa)
+    input  wire [LARGURA-1:0] endereco_debug,
+    output wire [LARGURA-1:0] dado_debug,
     // saidas de observacao: uteis na simulacao e para ligar em LEDs/display
     output wire [LARGURA-1:0] pc_debug,
     output wire [LARGURA-1:0] instrucao_debug
@@ -137,7 +140,8 @@ module mips_monociclo #(
     ) mem_dados (
         .clk(clk), .escreve_mem(mem_write),
         .endereco(alu_result), .dado_escrita(dado_2),
-        .dado_leitura(mem_read_data)
+        .dado_leitura(mem_read_data),
+        .endereco_debug(endereco_debug), .dado_debug(dado_debug)
     );
 
     // ======================= ESCRITA NO BANCO ===============================
