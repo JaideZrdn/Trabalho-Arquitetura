@@ -98,75 +98,328 @@ laboratório — exigência 1 da rubrica.)*
 
 ## III. Caminho de dados
 
-### A. Estrutura geral
+### A. O que é um caminho de dados
 
-O caminho de dados segue a organização clássica descrita em [1], seção 4.3,
-estendida com o tratamento de saltos descrito na seção 4.4.
+Um processador não "interpreta" instruções uma por uma como um programa faria.
+Ele é um circuito fixo, soldado no silício, por onde os dados **sempre**
+passam pelos mesmos fios. O que muda de uma instrução para outra não é o
+caminho existir — é **qual caminho é escolhido** em cada bifurcação.
 
+As bifurcações são os multiplexadores, que aparecem repetidamente neste
+relatório. Um multiplexador é uma chave: recebe várias entradas e um sinal de
+seleção, e deixa passar apenas uma delas. Quem aciona essas chaves é a
+unidade de controle, que lê a instrução e decide a posição de cada uma.
+
+O conjunto de fios, somadores, memórias e multiplexadores chama-se **caminho
+de dados**. A unidade de controle é o que o comanda.
+
+Nesta implementação, **cada instrução é concluída em um único ciclo de
+clock** — daí o nome monociclo. Durante o ciclo o sinal atravessa todo o
+circuito; no fim dele, três coisas podem ser gravadas: o contador de
+programa, um registrador e uma posição da memória de dados. Nada mais é
+guardado, e é por isso que tudo precisa acontecer dentro do mesmo ciclo.
+
+A consequência é que o período do clock precisa ser longo o bastante para a
+instrução mais lenta, que é a de leitura da memória. Resolver esse desperdício
+é justamente o objetivo do pipeline, assunto da terceira etapa.
+
+### B. Os cinco passos de uma instrução
+
+Mesmo sem estágios separados, toda instrução percorre a mesma sequência
+lógica dentro do ciclo:
+
+1. **Buscar** — o contador de programa aponta um endereço, e a memória de
+   instruções devolve os 32 bits que estão lá.
+2. **Decodificar e ler** — esses 32 bits são fatiados em campos. Alguns dizem
+   o que fazer, outros dizem quais registradores usar, outros carregam uma
+   constante. Os registradores indicados são lidos.
+3. **Calcular** — a unidade lógica e aritmética (ALU) opera sobre dois
+   valores. Dependendo da instrução, ela soma números do programa, calcula um
+   endereço de memória ou compara dois valores.
+4. **Acessar a memória** — apenas as instruções de leitura e escrita usam
+   este passo; as demais o atravessam sem efeito.
+5. **Gravar** — o resultado volta para um registrador, e o contador de
+   programa recebe o endereço da próxima instrução.
+
+Um detalhe que costuma surpreender: **os cinco passos não são sequenciais no
+tempo**. Todos os blocos estão ligados e trabalhando simultaneamente durante
+o ciclo inteiro. A memória de dados recebe um endereço mesmo numa instrução
+de soma — simplesmente ninguém usa o que ela responde. Hardware não escolhe o
+que calcular; ele calcula tudo e descarta o que não serve.
+
+### C. O caminho de dados implementado
+
+O ponto de partida é a organização clássica descrita em [1], seções 4.3 e
+4.4. Sobre ela, cinco pontos precisaram ser acrescentados ou ampliados para
+que as instruções de salto do programa de teste funcionassem. No diagrama
+abaixo, os blocos em **laranja escuro** são acréscimos que não existem no
+caminho de dados básico, e os em **amarelo** são blocos que existem, mas
+tiveram que ser ampliados.
+
+```mermaid
+flowchart TB
+    subgraph S1["1 · Buscar a instrução"]
+        PC["PC<br/>guarda o endereço<br/>da instrução atual"]
+        MI["Memória de instruções<br/>contém o programa"]
+        ADD4["Somador<br/>PC + 4"]
+    end
+
+    CAMPOS{{"os 32 bits da instrução, fatiados em campos"}}
+
+    subgraph S2["2 · Decodificar e ler registradores"]
+        CU["Unidade de controle<br/>lê a instrução e comanda todo o resto"]
+        MWR["Mux do registrador destino<br/>escolhe QUEM recebe a escrita"]
+        BR["Banco de registradores<br/>os 32 registradores do MIPS"]
+        EXT["Extensor de sinal<br/>estica o imediato de 16 para 32 bits"]
+    end
+
+    subgraph S3["3 · Calcular"]
+        MUXA["Mux da 1ª entrada da ALU<br/>registrador ou deslocamento"]
+        MUXB["Mux da 2ª entrada da ALU<br/>registrador ou imediato"]
+        ALUC["Controle da ALU<br/>decide a operação"]
+        ALU["ALU<br/>calcula e sinaliza se deu zero"]
+    end
+
+    subgraph S4["4 · Acessar memória e gravar"]
+        MD["Memória de dados<br/>variáveis, vetor e pilha"]
+        MWD["Mux do dado escrito<br/>escolhe O QUE é gravado"]
+    end
+
+    subgraph S5["5 · Decidir a próxima instrução"]
+        SL2["Deslocador<br/>imediato x 4"]
+        ADDB["Somador<br/>destino do desvio"]
+        JAC["Cálculo do endereço de salto"]
+        MPC["Mux do próximo PC<br/>seguir, desviar, saltar ou voltar"]
+    end
+
+    PC --> MI
+    PC --> ADD4
+    MI --> CAMPOS
+
+    CAMPOS -->|"o que fazer"| CU
+    CAMPOS -->|"quais registradores"| BR
+    CAMPOS -->|"candidatos a destino"| MWR
+    CAMPOS -->|"constante"| EXT
+    CAMPOS -->|"deslocamento"| MUXA
+    CAMPOS -->|"operação exata"| ALUC
+    CAMPOS -->|"endereço do salto"| JAC
+
+    MWR -->|"registrador destino"| BR
+    BR -->|"1º valor lido"| MUXA
+    BR -->|"2º valor lido"| MUXB
+    BR -->|"valor a gravar na memória"| MD
+    BR -->|"endereço de retorno"| MPC
+    EXT --> MUXB
+    EXT --> SL2
+
+    CU -->|"família da operação"| ALUC
+    CU -->|"qual caminho seguir"| MPC
+    ALUC --> ALU
+    MUXA --> ALU
+    MUXB --> ALU
+    ALU -->|"deu zero?"| CU
+
+    ALU -->|"endereço"| MD
+    ALU --> MWD
+    MD -->|"valor lido"| MWD
+    ADD4 -->|"PC + 4"| MWD
+    MWD -->|"valor gravado"| BR
+
+    ADD4 --> ADDB
+    ADD4 --> JAC
+    ADD4 --> MPC
+    SL2 --> ADDB
+    ADDB --> MPC
+    JAC --> MPC
+    MPC -->|"próximo endereço"| PC
+
+    classDef novo fill:#ffe8cc,stroke:#d9480f,stroke-width:3px
+    classDef ampliado fill:#fff3bf,stroke:#e67700,stroke-width:3px
+    class MWR,MUXA,JAC novo
+    class MPC,MWD ampliado
 ```
-   ┌──────────────────────────────────────────────────────────────┐
-   │                                                              │
-   ▼                                                              │
- ┌────┐                                                           │
- │ PC │──┬──► memória de instruções ──► instrução[31:0]            │
- └────┘  │                                   │                    │
-         └──► somador (+4) ──────────────────┼──────────┐         │
-                                             │          │         │
-      ┌──────────────┬───────────────────────┴──┐       │         │
-      │              │                          │       │         │
-  [31:26] op    [25:21] rs   [20:16] rt   [15:0] imediato         │
-      │              │            │             │       │         │
-      ▼              ▼            ▼             ▼       │         │
-  ┌─────────┐   ┌───────────────────────┐  ┌──────────┐ │         │
-  │controle │   │ banco de registradores│  │ extensor │ │         │
-  └─────────┘   └───────────────────────┘  │ de sinal │ │         │
-      │            │ dado1    │ dado2      └──────────┘ │         │
-      │ sinais     │          │                 │       │         │
-      │            ▼          ▼                 ▼       │         │
-      │       ┌─────────┐  ┌─────────────────────┐      │         │
-      │       │mux_alu_a│  │     mux_alu_b       │      │         │
-      │       └─────────┘  └─────────────────────┘      │         │
-      │            │              │                     │         │
-      │            ▼              ▼                     │         │
-      │         ┌──────────────────┐                    │         │
-      │         │       ALU        │                    │         │
-      │         └──────────────────┘                    │         │
-      │            │ resultado  │ Zero                  │         │
-      │            ▼            └──► lógica de desvio ──┼─────────┤
-      │      ┌──────────────┐        + jump_address_calc│      mux_pc
-      │      │memória dados │                           │
-      │      └──────────────┘                           │
-      │            │                                    │
-      │            └──►┌───────────────┐◄── ALU         │
-      │                │ mux_write_data│◄── pc_plus_4 ◄─┘
-      │                └───────────────┘
-      │                        │
-      └────────────────────────┴──► banco de registradores
-                                    (endereço vindo de mux_write_reg)
-```
 
-### B. O que as instruções de salto acrescentam
+### D. Por que cada acréscimo foi necessário
 
-O caminho de dados monociclo básico não contempla `j`, `jal` nem `jr`. Os
-acréscimos são pontuais e constituem o foco desta entrega:
+A regra que orientou cada decisão foi sempre a mesma: *qual instrução do
+programa de teste deixaria de funcionar sem este bloco?* Nada foi acrescentado
+por completude teórica.
 
-| instrução | acréscimo ao caminho de dados |
+#### 1. O multiplexador que escolhe o registrador destino
+
+**O que faz.** Decide qual dos 32 registradores vai receber o valor gravado
+no fim do ciclo.
+
+**Por que foi necessário.** O número do registrador destino não está sempre no
+mesmo lugar da instrução. Nas instruções que operam entre registradores, ele
+está num campo; nas que usam uma constante, está em outro; e na instrução de
+chamada de função ele não está em campo nenhum — é sempre o registrador 31,
+por convenção do MIPS. São três origens diferentes para a mesma informação,
+e é preciso escolher entre elas.
+
+**O que quebraria sem ele.** A instrução `addi $sp, $sp, -20`, do prólogo da
+função de ordenação, gravaria o resultado no registrador errado. A pilha
+nunca seria reservada e o programa se perderia na primeira chamada.
+
+#### 2. O multiplexador da primeira entrada da ALU
+
+**O que faz.** Escolhe se a primeira entrada da ALU vem de um registrador ou
+do campo de deslocamento embutido na própria instrução.
+
+**Por que foi necessário.** A instrução de deslocamento à esquerda precisa
+saber *quantas casas* deslocar, e essa quantidade é uma constante pequena
+escrita dentro da instrução — não o conteúdo de um registrador. No caminho de
+dados básico, a primeira entrada da ALU vem sempre do banco de registradores,
+sem alternativa.
+
+**O que quebraria sem ele.** A instrução `sll $t1, $a1, 2`, que multiplica o
+índice por 4 para calcular a posição de um elemento do vetor, deslocaria pela
+quantidade errada. Todos os endereços de vetor sairiam incorretos e o programa
+ordenaria lixo — sem gerar erro algum, o que é o pior tipo de defeito.
+
+#### 3. O bloco que monta o endereço de salto
+
+**O que faz.** Constrói o endereço de destino das instruções de salto
+incondicional a partir dos 26 bits reservados para isso na instrução.
+
+**Por que foi necessário.** Desvio condicional e salto resolvem problemas
+diferentes. O desvio condicional guarda uma distância *relativa*, pequena,
+suficiente para pular algumas instruções dentro de um laço. O salto precisa
+alcançar qualquer ponto do programa, então guarda um endereço *absoluto*.
+Como 26 bits não preenchem os 32 de um endereço, os quatro bits mais altos
+são herdados do endereço atual e os dois mais baixos são sempre zero, porque
+toda instrução está alinhada em quatro bytes.
+
+**O que quebraria sem ele.** Não existiriam `j` nem `jal`. Sem `jal` não
+existe chamada de função; sem chamada de função, a rotina de ordenação não
+consegue invocar a rotina de troca. O programa de teste inteiro é impossível.
+
+#### 4. O multiplexador do próximo endereço, ampliado de duas para quatro entradas
+
+**O que faz.** Escolhe de onde vem o endereço da próxima instrução.
+
+**Por que foi necessário.** No caminho de dados básico há apenas duas
+possibilidades: seguir em frente, ou desviar. O programa de teste precisa de
+quatro:
+
+| situação | de onde vem o próximo endereço |
 |---|---|
-| `j` | entrada no `mux_pc`; endereço formado por `{PC+4[31:28], target, 2'b00}` no `jump_address_calc` |
-| `jal` | entrada `31` no `mux_write_reg` e entrada `pc_plus_4` no `mux_write_data` — a instrução grava em registrador *e* desvia |
-| `jr` | entrada no `mux_pc` vinda da primeira saída do banco de registradores |
-| `sll` | entrada `shamt` no `mux_alu_a`, já que o deslocamento vem da própria instrução e não de um registrador |
+| execução normal | do somador que calcula o endereço seguinte |
+| desvio condicional tomado | do somador do desvio |
+| salto incondicional | do bloco que monta o endereço de salto |
+| **retorno de função** | **do banco de registradores** |
 
-### C. Interface entre controle e caminho de dados
+A quarta é a mais interessante: o endereço de retorno não está na instrução
+nem foi calculado — está guardado num registrador, colocado lá pela chamada
+que ocorreu antes. É a única situação em que um valor lido do banco de
+registradores vai parar diretamente no contador de programa.
 
-A codificação dos sinais de controle está especificada em
-[`docs/contrato-sinais.md`](contrato-sinais.md). Esse documento existe porque
-a discordância entre a unidade de controle e os multiplexadores é o único
-erro do projeto que **nenhum testbench de módulo isolado consegue detectar**:
-cada bloco, verificado sozinho, está correto; o defeito só aparece na
-integração.
+**O que quebraria sem ele.** A rotina de troca nunca voltaria para quem a
+chamou. O processador entraria em laço infinito na primeira chamada.
 
----
+#### 5. O multiplexador do dado gravado, ampliado de duas para três entradas
+
+**O que faz.** Escolhe qual valor é gravado no registrador destino.
+
+**Por que foi necessário.** No caminho de dados básico há duas origens: o
+resultado da ALU, ou o valor lido da memória. A instrução de chamada de função
+precisa de uma terceira — ela grava **o endereço da instrução seguinte**, para
+que a função saiba para onde voltar.
+
+**O que quebraria sem ele.** A chamada de função saltaria corretamente, mas
+não deixaria rastro de onde voltar. O retorno levaria o programa a um endereço
+indefinido.
+
+#### Um sinal que foi removido
+
+O caminho de dados do livro traz um sinal de habilitação de leitura da memória
+de dados. Nesta implementação ele não existe: a leitura é contínua e sem
+efeito colateral, de modo que ler um endereço cujo valor ninguém usa não causa
+problema. Remover o sinal simplifica a unidade de controle sem alterar o
+comportamento. A escrita, essa sim, continua controlada — gravar por engano
+corromperia a memória.
+
+### E. A interface entre o controle e o caminho de dados
+
+Cada multiplexador descrito acima recebe um sinal de seleção, e cada sinal tem
+uma codificação própria: qual valor corresponde a qual entrada. Essas
+codificações estão registradas em [`docs/contrato-sinais.md`](contrato-sinais.md),
+com a tabela completa das doze instruções.
+
+Esse documento existe porque a discordância entre a unidade de controle e os
+multiplexadores é o único erro do projeto que **nenhum teste de bloco isolado
+consegue detectar**: cada peça, verificada sozinha, está correta; o defeito só
+aparece quando tudo é ligado.
+
+### F. Mapeamento entre a arquitetura e os arquivos
+
+Os nomes usados acima são descritivos, para que o texto seja legível por quem
+não conhece o código. A correspondência com os arquivos do repositório é a
+seguinte.
+
+**Caminho de dados — `rtl/`**
+
+| arquivo | papel na arquitetura |
+|---|---|
+| `pc.v` | contador de programa: guarda o endereço da instrução atual |
+| `somador.v` | soma dois valores; usado em duas instâncias — `PC + 4` e destino do desvio |
+| `memoria_instrucoes.v` | memória somente-leitura que contém o programa |
+| `banco_registradores.v` | os 32 registradores; duas leituras e uma escrita por ciclo |
+| `extensor_sinal.v` | estica a constante de 16 para 32 bits preservando o sinal |
+| `memoria_dados.v` | variáveis, vetor de teste e pilha |
+| `alu.v` | unidade lógica e aritmética; produz também o sinal de igualdade |
+| `alu_control.v` | traduz a família da operação e o campo da instrução na operação exata |
+| `control_unit.v` | unidade de controle: lê a instrução e aciona todos os multiplexadores |
+| `shift_left_2.v` | multiplica por quatro o deslocamento do desvio |
+| `mux_alu_a.v` | **(acréscimo 2)** primeira entrada da ALU: registrador ou deslocamento |
+| `mux_alu_b.v` | segunda entrada da ALU: registrador ou constante |
+| `mux_write_reg.v` | **(acréscimo 1)** qual registrador recebe a escrita |
+| `mux_write_data.v` | **(acréscimo 5)** qual valor é gravado no registrador |
+| `jump_address_calc.v` | **(acréscimo 3)** monta o endereço do salto incondicional |
+| `mux_pc.v` | **(acréscimo 4)** de onde vem o endereço da próxima instrução |
+| `mips_monociclo.v` | topo do processador: instancia os dezesseis blocos acima e liga a fiação |
+
+**Invólucro de placa — `fpga/`**
+
+Nada aqui faz parte do processador; são as peças que existem apenas para
+mostrar o resultado numa placa física.
+
+| arquivo | papel |
+|---|---|
+| `de2_115_top.v` | liga o processador às chaves, botões, LEDs e mostradores |
+| `divisor_clock.v` | reduz os 50 MHz da placa para cerca de 1 Hz, tornando a execução visível |
+| `botao_pulso.v` | filtra o repique mecânico do botão e gera um único pulso por aperto |
+| `decodificador_7seg.v` | converte um dígito hexadecimal no padrão de segmentos do mostrador |
+
+A separação é deliberada: o processador recebe apenas sinal de relógio,
+sinal de reinício e portas de observação. Ele não sabe que existe uma
+DE2-115, o que permite simulá-lo, trocar de placa ou mudar o esquema de
+mostradores sem alterar uma linha do caminho de dados.
+
+```mermaid
+flowchart TD
+    TOP["Invólucro de placa<br/>chaves · botões · LEDs · mostradores"]
+    DIV["Divisor de relógio<br/>50 MHz para 1 Hz"]
+    BTN["Filtro de botão<br/>um pulso por aperto"]
+    SEG["Decodificador de 7 segmentos<br/>sete instâncias"]
+    CPU["Processador MIPS monociclo"]
+    BLOCOS["Dezesseis blocos do caminho de dados<br/>contador de programa · memórias · banco de<br/>registradores · ALU · controle · multiplexadores"]
+
+    TOP --> DIV
+    TOP --> BTN
+    TOP --> SEG
+    TOP -->|"relógio e reinício"| CPU
+    CPU -->|"endereço atual e valor observado"| TOP
+    CPU --> BLOCOS
+
+    classDef placa fill:#e7f5ff,stroke:#1971c2
+    classDef proc fill:#f4f4f4,stroke:#333
+    class TOP,DIV,BTN,SEG placa
+    class CPU,BLOCOS proc
+```
+
+O diagrama acima mostra a contenção: tudo que é azul desaparece se o projeto
+for simulado em vez de embarcado, e o processador continua idêntico.
 
 ## IV. Módulos implementados
 
