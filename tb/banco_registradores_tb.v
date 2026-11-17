@@ -31,6 +31,21 @@ module banco_registradores_tb;
         .dado_1(dado_1), .dado_2(dado_2)
     );
 
+    // ---- segunda instancia, em modo write-first (BYPASS = 1) --------------
+    // E assim que ele sera usado no pipeline: a instrucao no estagio WB grava
+    // enquanto outra, tres estagios atras, le o mesmo registrador.
+    reg  [4:0]  bp_leitura_1, bp_escrita;
+    reg  [31:0] bp_dado;
+    reg         bp_habilita;
+    wire [31:0] bp_saida_1, bp_saida_2;
+
+    banco_registradores #(.LARGURA(32), .N_REGS(32), .BYPASS(1)) dut_bypass (
+        .clk(clk), .escreve_reg(bp_habilita),
+        .reg_leitura_1(bp_leitura_1), .reg_leitura_2(5'd0),
+        .reg_escrita(bp_escrita), .dado_escrita(bp_dado),
+        .dado_1(bp_saida_1), .dado_2(bp_saida_2)
+    );
+
     integer erros = 0;
 
     // grava um valor num registrador (um ciclo de clock)
@@ -66,6 +81,7 @@ module banco_registradores_tb;
         $dumpfile("build/banco_registradores_tb.vcd");
         $dumpvars(0, banco_registradores_tb);
         escreve_reg = 0; reg_leitura_1 = 0; reg_leitura_2 = 0;
+        bp_habilita = 0; bp_leitura_1 = 0; bp_escrita = 0; bp_dado = 0;
 
         $display("");
         $display("== banco_registradores ==");
@@ -105,6 +121,48 @@ module banco_registradores_tb;
         // --- sobrescrever um registrador ja usado ----------------------------
         escreve(A0, 32'd0);
         le_e_confere(A0, A1, 0, 8, "sobrescrita de $a0");
+
+        // ===== modo write-first, para o pipeline ============================
+        $display("");
+        $display("== o MESMO banco com BYPASS = 1 (modo pipeline) ==");
+
+        // grava 777 em $s0 de verdade, com o bypass desligado da leitura
+        bp_habilita = 1; bp_escrita = S0; bp_dado = 32'd777; bp_leitura_1 = T0;
+        @(posedge clk); #1;
+        bp_habilita = 0; bp_leitura_1 = S0; #1;
+        if (bp_saida_1 !== 32'd777) begin
+            $display("  ERRO  escrita normal falhou: $s0 = %0d", bp_saida_1);
+            erros = erros + 1;
+        end else
+            $display("  ok    %-46s $s0 = %0d", "escrita normal continua funcionando", bp_saida_1);
+
+        // agora o caso que o pipeline cria: ler $s0 no MESMO ciclo em que o
+        // estagio WB esta gravando 999 nele
+        bp_habilita = 1; bp_escrita = S0; bp_dado = 32'd999; bp_leitura_1 = S0; #1;
+        if (bp_saida_1 !== 32'd999) begin
+            $display("  ERRO  write-first: leu %0d, deveria ler o valor sendo escrito (999)",
+                     bp_saida_1);
+            erros = erros + 1;
+        end else
+            $display("  ok    %-46s le %0d, nao o valor antigo",
+                     "write-first: le a escrita do mesmo ciclo", bp_saida_1);
+
+        // ler OUTRO registrador no mesmo ciclo nao pode sofrer bypass
+        bp_leitura_1 = T0; #1;
+        if (bp_saida_1 !== 32'd0) begin
+            $display("  ERRO  bypass vazou para outro registrador: $t0 = %0d", bp_saida_1);
+            erros = erros + 1;
+        end else
+            $display("  ok    %-46s $t0 = 0", "bypass so afeta o registrador escrito");
+
+        // e o registrador 0 continua intocavel, mesmo com bypass
+        bp_escrita = ZERO; bp_dado = 32'hDEAD; bp_leitura_1 = ZERO; #1;
+        if (bp_saida_1 !== 32'd0) begin
+            $display("  ERRO  bypass furou a protecao de $zero: %0d", bp_saida_1);
+            erros = erros + 1;
+        end else
+            $display("  ok    %-46s", "$zero resiste ao bypass");
+        bp_habilita = 0;
 
         $display("");
         if (erros == 0) $display("RESULTADO: todos os casos passaram");

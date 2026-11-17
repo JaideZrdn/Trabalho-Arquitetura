@@ -27,7 +27,16 @@
 
 module banco_registradores #(
     parameter LARGURA = 32,     // largura de cada registrador
-    parameter N_REGS  = 32      // quantidade de registradores
+    parameter N_REGS  = 32,     // quantidade de registradores
+    // BYPASS = 1 faz a leitura enxergar a escrita do MESMO ciclo
+    // ("write-first"). Necessario no pipeline: a instrucao no estagio WB
+    // grava enquanto outra, tres estagios atras, le o mesmo registrador.
+    // Sem isso, essas 13 situacoes do nosso programa leriam o valor antigo.
+    //
+    // NO MONOCICLO TEM QUE FICAR 0. La a escrita e a leitura sao da MESMA
+    // instrucao: "add $t1,$a0,$t1" leria o proprio resultado como operando,
+    // criando um laco combinacional. Por isso o padrao e 0.
+    parameter BYPASS  = 0
 )(
     input  wire                        clk,
     input  wire                        escreve_reg,    // habilita a escrita
@@ -54,13 +63,23 @@ module banco_registradores #(
     end
 
     // ---- leitura: combinacional, e o endereco 0 sempre devolve zero --------
-    assign dado_1 = (reg_leitura_1 == {BITS_REG{1'b0}})
-                    ? {LARGURA{1'b0}}
-                    : registradores[reg_leitura_1];
+    // Com BYPASS, se o endereco lido for o mesmo que esta sendo escrito agora,
+    // devolve o dado que vai ser gravado em vez do conteudo antigo.
+    wire bypass_1 = (BYPASS != 0) && escreve_reg &&
+                    (reg_escrita != {BITS_REG{1'b0}}) &&
+                    (reg_escrita == reg_leitura_1);
 
-    assign dado_2 = (reg_leitura_2 == {BITS_REG{1'b0}})
-                    ? {LARGURA{1'b0}}
-                    : registradores[reg_leitura_2];
+    wire bypass_2 = (BYPASS != 0) && escreve_reg &&
+                    (reg_escrita != {BITS_REG{1'b0}}) &&
+                    (reg_escrita == reg_leitura_2);
+
+    assign dado_1 = (reg_leitura_1 == {BITS_REG{1'b0}}) ? {LARGURA{1'b0}}
+                  : bypass_1                            ? dado_escrita
+                  : registradores[reg_leitura_1];
+
+    assign dado_2 = (reg_leitura_2 == {BITS_REG{1'b0}}) ? {LARGURA{1'b0}}
+                  : bypass_2                            ? dado_escrita
+                  : registradores[reg_leitura_2];
 
     // ---- escrita: so na subida do clock, e nunca no registrador 0 ----------
     always @(posedge clk) begin
@@ -68,9 +87,12 @@ module banco_registradores #(
             registradores[reg_escrita] <= dado_escrita;
     end
 
-    // Nota para o monociclo: a escrita acontece no FIM do ciclo, entao uma
-    // leitura feita no mesmo ciclo ainda ve o valor antigo. Isso esta correto
-    // aqui — cada instrucao ocupa um ciclo inteiro. Quando o projeto virar
-    // pipeline (3a entrega), esse detalhe reaparece como hazard de dados.
+    // Com BYPASS = 0 (monociclo) a escrita acontece no FIM do ciclo, entao uma
+    // leitura feita no mesmo ciclo ve o valor antigo — e esta certo, porque
+    // cada instrucao ocupa um ciclo inteiro.
+    //
+    // Com BYPASS = 1 (pipeline) a leitura ja enxerga a escrita. E o caso em
+    // que a instrucao no WB e tres estagios mais velha que a que esta lendo
+    // no ID, entao nao ha laco: o dado ja existe ha dois ciclos.
 
 endmodule
