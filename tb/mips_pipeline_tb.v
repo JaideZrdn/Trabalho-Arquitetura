@@ -61,16 +61,21 @@ module mips_pipeline_tb;
         // porque o laco final so salta para si mesmo.
         chegou_no_fim = 0;
         parado = 0;
+        //
+        // A amostragem e feita POUCO ANTES da borda, nao depois. Depois da
+        // borda os sinais combinacionais ja valem para o ciclo seguinte, e a
+        // contagem sairia um ciclo menor do que a real.
+        //
+        // escreveu_debug ja ignora escrita no registrador 0: o banco a
+        // descarta, e ela aparece porque o pipeline busca especulativamente
+        // alem do fim do programa e essas instrucoes de lixo chegam ao WB.
         while (!chegou_no_fim && ciclos < 20000) begin
-            @(posedge clk); #1;
+            #4;
             ciclos = ciclos + 1;
-            // Escrita no registrador 0 nao conta: o banco a descarta. Ela
-            // aparece porque o pipeline busca especulativamente alem do fim
-            // do programa, e essas instrucoes de lixo chegam ao WB.
-            if ((dut.wb_reg_write && dut.wb_destino != 5'd0) || dut.mem_mem_write)
-                parado = 0;
-            else                                       parado = parado + 1;
+            if (dut.escreveu_debug) parado = 0;
+            else                    parado = parado + 1;
             if (parado >= 20) chegou_no_fim = 1;
+            @(posedge clk); #1;
         end
 
         if (!chegou_no_fim) begin

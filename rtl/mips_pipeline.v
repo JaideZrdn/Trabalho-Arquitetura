@@ -45,7 +45,13 @@ module mips_pipeline #(
     input  wire [LARGURA-1:0] endereco_debug,
     output wire [LARGURA-1:0] dado_debug,
     output wire [LARGURA-1:0] pc_debug,
-    output wire [LARGURA-1:0] instrucao_debug
+    output wire [LARGURA-1:0] instrucao_debug,
+    // observacao do comportamento do pipeline — usada pelo involucro de placa
+    // para acender LEDs e para decidir que o programa terminou
+    output wire               escreveu_debug,   // houve escrita arquitetural
+    output wire               stall_debug,      // stall de load-use neste ciclo
+    output wire               flush_debug,      // transferencia de controle
+    output wire               forward_debug     // encaminhamento ativo
 );
 
     // =====================================================================
@@ -320,5 +326,23 @@ module mips_pipeline #(
         .pc_plus_4(wb_pc_plus_4), .mem_to_reg(wb_mem_to_reg),
         .write_data(wb_dado_escrita)
     );
+
+    // =====================================================================
+    //  observacao
+    //
+    //  escreveu_debug diz se este ciclo alterou o estado visivel do
+    //  programa. Escrita no registrador 0 nao conta: o banco a descarta, e
+    //  ela aparece porque o pipeline busca especulativamente alem do fim do
+    //  programa e essas instrucoes de lixo chegam ao WB.
+    //
+    //  E o criterio de fim de programa. Nao da para usar o PC: o laco final
+    //  `j end` e reavaliado no EX a cada tres ciclos, entao o PC nunca fica
+    //  constante — ele circula entre o endereco do laco e os dois seguintes,
+    //  que sao buscados e descartados.
+    // =====================================================================
+    assign escreveu_debug = (wb_reg_write && wb_destino != 5'd0) || mem_mem_write;
+    assign stall_debug    = segura_pc;
+    assign flush_debug    = tomado;
+    assign forward_debug  = (forward_a != 2'b00) || (forward_b != 2'b00);
 
 endmodule

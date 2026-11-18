@@ -1,256 +1,235 @@
-# Roteiro da apresentação — 3ª entrega (pipeline)
+# Apresentação — 3ª entrega (pipeline)
 
-**Duração:** cerca de 10 minutos, três integrantes.
-**Material na tela:** diagrama do caminho de dados e um terminal para rodar
-os testes ao vivo.
+**10 minutos, três integrantes.** Diagrama do caminho de dados na tela e um
+terminal aberto para rodar os testes.
 
-Cada integrante apresenta os blocos sob sua responsabilidade: o que o bloco
-faz, por que ele precisou existir, quais as entradas e quem decide o quê, e o
-resultado do testbench.
+Cada um mostra os arquivos que fez, diz o que cada módulo faz, e pontua um
+detalhe que valeu a pena. No fim, os resultados.
 
 ---
 
-## Abertura — 1 minuto · *qualquer um*
+## ABERTURA — 1 minuto
 
-> Na entrega anterior apresentamos o processador MIPS monociclo, com as
-> instruções de salto. Ele funcionava, mas tinha uma limitação: o período do
-> clock precisava acomodar a instrução mais lenta, a de leitura de memória,
-> que atravessa seis blocos em série. Uma instrução simples como uma soma
-> desperdiçava o resto do ciclo.
+> Boa tarde, professor.
 >
-> Nesta entrega dividimos a execução em cinco estágios. Cinco instruções
-> diferentes ficam em voo ao mesmo tempo, uma em cada estágio, e o clock
-> passa a ser limitado pelo estágio mais lento — não pela instrução mais
-> lenta.
+> Na entrega passada a gente apresentou o MIPS monociclo. Ele funcionava,
+> mas tinha um problema: como cada instrução ocupava o processador inteiro
+> durante um ciclo, o clock tinha que durar o tempo da instrução mais lenta,
+> que é o `lw`. Uma soma simples desperdiçava o resto do ciclo.
 >
-> O conjunto de instruções é o mesmo, o programa de teste é o mesmo. O que
-> mudou é a organização interna.
+> Nesta entrega a gente dividiu o processador em cinco estágios. Agora
+> cinco instruções rodam ao mesmo tempo, cada uma num estágio diferente, e o
+> clock só precisa durar o tempo do estágio mais lento.
 >
-> Tudo foi implementado em Verilog, com os módulos parametrizados, e cada
-> bloco tem testbench próprio.
+> As instruções são as mesmas, o programa de teste é o mesmo. O que mudou
+> foi a organização por dentro.
+>
+> A gente dividiu o trabalho em três partes e cada um vai mostrar a sua.
 
-**Mostrar os cinco estágios no diagrama:**
-
-```
-IF   busca        ID  decodifica e lê      EX  calcula e decide desvios
-MEM  acessa memória                        WB  grava no banco
-```
+**Apontar os cinco estágios no diagrama enquanto fala.**
 
 ---
 
 # PARTE 1 — JAIDE · 3 minutos
 
-**Tema: a estrutura do pipeline — os registradores de estágio.**
+> A parte que eu fiz foi a estrutura do pipeline. São esses arquivos:
 
-## O que eu implementei
-
-| arquivo | função | testbench |
-|---|---|---|
-| `reg_if_id.v` | entre a busca e a decodificação | 9 casos |
-| `reg_id_ex.v` | entre a decodificação e a execução | 13 casos |
-| `reg_ex_mem.v` | entre a execução e a memória | 9 casos |
-| `reg_mem_wb.v` | entre a memória e a escrita | 8 casos |
-| `pc_com_habilita.v` | contador de programa que pode ser congelado | 9 casos |
-| `banco_registradores.v` | modo *write-first* acrescentado | 13 casos |
-
-## O que falar
-
-> Dividir o processador em cinco estágios exige um registrador entre cada
-> par deles. Esses registradores são o que segura o que a instrução carrega
-> consigo enquanto ela caminha pelo pipeline.
->
-> E não são só os dados. O ponto que mais confunde é que **os sinais de
-> controle também viajam**. A unidade de controle decodifica a instrução lá
-> no segundo estágio, mas o sinal que autoriza escrever no banco de
-> registradores só age no quinto. Então cada registrador carrega, além dos
-> dados, o subconjunto de sinais que ainda não foi usado.
-
-**Mostrar o `reg_id_ex.v`** — é o maior dos quatro, e dá para apontar a
-separação entre a parte de dados e a parte de controle.
-
-> O `reg_id_ex` é o maior porque é onde a instrução ainda carrega tudo:
-> os dois valores lidos, o imediato estendido, os campos `rs`, `rt`, `rd`,
-> `shamt` e `funct`, mais os oito sinais de controle.
-
-### O conceito da bolha
-
-> Cada registrador tem uma entrada de limpeza. Quando ela é acionada, os
-> sinais de escrita vão a zero. É isso que chamamos de bolha: a instrução
-> continua andando pelo pipeline, atravessa os cinco estágios, mas com as
-> duas permissões de escrita desligadas — não altera registrador nem
-> memória.
->
-> Se qualquer um dos dois sinais escapar, a bolha deixa de ser inofensiva e
-> vira uma instrução fantasma. Por isso o testbench do `reg_id_ex` tem um
-> caso específico: aciona a limpeza com as entradas de escrita em um, e
-> verifica que as saídas saem em zero.
-
-### O banco de registradores
-
-> O banco precisou de uma mudança. No monociclo, uma leitura feita no mesmo
-> ciclo de uma escrita vê o valor antigo — e isso estava certo, porque era a
-> mesma instrução.
->
-> No pipeline não. A instrução que está gravando no quinto estágio é três
-> instruções mais velha que a que está lendo no segundo. Analisamos o nosso
-> programa e encontramos **treze situações** assim.
->
-> A solução foi o modo *write-first*: a leitura enxerga a escrita do mesmo
-> ciclo. Mas não dava para simplesmente ligar — no monociclo isso criaria um
-> laço combinacional, porque lá a mesma instrução lê e escreve. Então virou
-> um parâmetro: desligado no monociclo, ligado no pipeline. Os dois
-> processadores continuam no repositório, os dois funcionam.
-
-## Resultado
+**Mostrar a pasta `rtl/`:**
 
 ```
-reg_if_id  9 · reg_id_ex 13 · reg_ex_mem 9 · reg_mem_wb 8
-pc_com_habilita 9 · banco_registradores 13      = 61 casos aprovados
+reg_if_id.v          reg_ex_mem.v        pc_com_habilita.v
+reg_id_ex.v          reg_mem_wb.v        banco_registradores.v  (modificado)
 ```
+
+> Quando você divide o processador em cinco estágios, precisa de um
+> registrador entre cada dois. São esses quatro primeiros arquivos.
+>
+> O `reg_if_id` fica entre a busca e a decodificação. Ele guarda a instrução
+> que acabou de ser lida e o endereço da próxima.
+>
+> O `reg_id_ex` fica entre a decodificação e a execução. É o maior dos
+> quatro, porque é onde a instrução ainda carrega tudo: os dois valores
+> lidos do banco, o imediato, os campos da instrução e os oito sinais de
+> controle.
+>
+> O `reg_ex_mem` e o `reg_mem_wb` são menores, porque a instrução já gastou
+> parte do que carregava.
+
+**Abrir o `reg_id_ex.v` e apontar a separação entre dados e controle.**
+
+> Uma coisa que a gente não tinha percebido no começo: **os sinais de
+> controle também têm que viajar**. A unidade de controle decodifica a
+> instrução no segundo estágio, mas o sinal que manda gravar no banco de
+> registradores só é usado no quinto. Então cada registrador carrega, além
+> dos dados, os sinais que ainda não foram usados.
+
+### Um detalhe que vale mostrar
+
+> Cada registrador tem uma entrada de limpeza. Quando ela liga, os sinais de
+> escrita vão para zero. Isso é a bolha: a instrução continua andando pelo
+> pipeline, mas não grava nada — nem em registrador, nem na memória.
+>
+> Se um desses dois sinais escapar, a bolha deixa de ser inofensiva. Por
+> isso eu pus um teste específico para isso: ligo a limpeza com as entradas
+> de escrita em 1 e verifico que as saídas saem em 0.
+
+### A mudança no banco de registradores
+
+> O banco eu não fiz do zero, ele já existia. Mas precisou de uma mudança.
+>
+> No monociclo, se você lê e escreve no mesmo ciclo, a leitura vê o valor
+> antigo. Estava certo, porque era a mesma instrução.
+>
+> No pipeline não serve. A instrução que está gravando no quinto estágio é
+> três instruções mais velha que a que está lendo no segundo. A gente
+> analisou o nosso programa e achou **treze situações** assim.
+>
+> A solução foi fazer a leitura enxergar a escrita do mesmo ciclo. Só que eu
+> não podia simplesmente ligar isso, porque no monociclo criaria um laço: lá
+> a mesma instrução lê e escreve, então ela leria o próprio resultado como
+> entrada. Resolvi com um parâmetro — desligado no monociclo, ligado no
+> pipeline. Os dois processadores continuam no repositório e os dois
+> funcionam.
+
+**Resultado:** `reg_if_id` 9 · `reg_id_ex` 13 · `reg_ex_mem` 9 ·
+`reg_mem_wb` 8 · `pc_com_habilita` 9 · `banco_registradores` 13 →
+**61 casos aprovados**.
 
 ---
 
 # PARTE 2 — MANUELA · 3 minutos
 
-**Tema: dependências de dados e encaminhamento.**
+> A minha parte foi resolver as colisões de dados. São esses arquivos:
 
-## O que eu implementei
+```
+unidade_forwarding.v     tb/tb_unidade_forwarding.v
+mux_forwarding.v         tb/tb_mux_forwarding.v
+                         tb/tb_forwarding_programa.v
+```
 
-| arquivo | função | testbench |
-|---|---|---|
-| `unidade_forwarding.v` | decide de onde vem cada operando da ALU | `tb/tb_unidade_forwarding.v` |
-| `mux_forwarding.v` | multiplexador de 3 entradas, uma instância por operando | `tb/tb_mux_forwarding.v` |
-| | cenário com o programa real | `tb/tb_forwarding_programa.v` |
-
-## O que falar
-
-> Com cinco instruções em voo ao mesmo tempo, elas começam a colidir. Uma
+> Com cinco instruções rodando ao mesmo tempo, elas começam a brigar. Uma
 > instrução pode precisar de um resultado que a anterior ainda não gravou.
 >
-> Analisamos o nosso programa de ordenação e contamos exatamente quantas
-> vezes isso acontece: **vinte** dependências entre instruções consecutivas,
-> e mais **oito** entre instruções separadas por uma.
+> A gente contou quantas vezes isso acontece no nosso programa: **vinte**
+> vezes entre instruções seguidas, e mais **oito** entre instruções
+> separadas por uma.
 
-### Como funciona
+### O que o módulo faz
 
-> A solução é não esperar a gravação. O resultado já existe fisicamente no
-> estágio adiante — só não foi gravado ainda. O encaminhamento desvia esse
-> valor direto para a entrada da ALU.
+> A ideia é não esperar a gravação. O resultado já existe lá na frente, só
+> não foi gravado ainda. Então em vez de esperar, a gente desvia o valor
+> direto para a entrada da ALU.
 >
-> A unidade de forwarding compara os registradores que a instrução no
-> terceiro estágio vai ler com os destinos das instruções que estão nos
-> estágios à frente. Quando encontra coincidência, manda o multiplexador
-> escolher o valor encaminhado em vez do que veio do banco.
+> O `unidade_forwarding` é quem decide. Ele compara os registradores que a
+> instrução vai ler com os destinos das instruções que estão nos estágios
+> adiante. Se bater, ele manda o multiplexador pegar o valor encaminhado em
+> vez do que veio do banco.
 >
-> As entradas dela são: os registradores de origem da instrução em execução,
-> mais o destino e a permissão de escrita de cada um dos dois estágios
-> seguintes.
+> O `mux_forwarding` é esse multiplexador. Ele tem três entradas: o valor
+> original, o do estágio de memória e o do estágio de escrita. Instanciei
+> dois, um para cada operando da ALU.
 
-### Dois detalhes de projeto
+### Dois detalhes
 
-> **Prioridade.** Se os dois estágios à frente escrevem no mesmo registrador,
-> o mais recente vence. O valor do estágio mais próximo é o mais atual.
+> **Primeiro: prioridade.** Se os dois estágios adiante escrevem no mesmo
+> registrador, vence o mais próximo, porque é o mais recente.
 >
-> **A exceção do `lw`.** Quando a instrução adiante é uma leitura de memória,
-> o que está disponível naquele ponto é o **endereço** calculado pela ALU,
-> não o dado — ele só chega no estágio seguinte. Encaminhar daria o número
-> errado. Por isso a unidade recebe um sinal que avisa quando a instrução é
-> um `lw`, e nesse caso ela não encaminha. Quem resolve esse caso é a
-> detecção de hazard, que a Ana vai apresentar.
+> **Segundo, e esse é o mais interessante: o `lw` é uma exceção.** Quando a
+> instrução adiante é um `lw`, o que está disponível ali é o **endereço**
+> que a ALU calculou, não o dado — o dado só chega no estágio seguinte. Se
+> eu encaminhasse, ia mandar o endereço no lugar do valor.
+>
+> Por isso o módulo recebe um sinal avisando quando a instrução é um `lw`, e
+> nesse caso ele não encaminha. Esse caso quem resolve é a Ana, com o stall.
 
-### A interface
+### Uma coisa que a gente teve que acrescentar
 
-> Como a unidade precisa saber quais registradores a instrução realmente lê,
-> acrescentamos dois sinais à unidade de controle — um para cada operando.
-> Sem eles, a unidade encaminharia valores para instruções que nem usam
-> aquele operando.
+> O módulo precisa saber quais registradores a instrução realmente lê. Um
+> `addi`, por exemplo, lê só um. Então a gente acrescentou dois sinais novos
+> na unidade de controle, um para cada operando. Sem isso, o forwarding
+> encaminharia valores para instruções que nem usam aquele operando.
 
 ---
 
 # PARTE 3 — ANA CLARA · 3 minutos
 
-**Tema: os perigos que o encaminhamento não resolve.**
+> A minha parte foram os dois casos que o forwarding não resolve. São esses
+> arquivos:
 
-## O que eu implementei
+```
+deteccao_hazard.v     controle_flush.v     control_unit.v  (modificado)
+```
 
-| arquivo | função | testbench |
-|---|---|---|
-| `deteccao_hazard.v` | detecta load-use e congela o pipeline | 7 casos |
-| `controle_flush.v` | descarta instruções após um desvio tomado | 8 casos |
-| `control_unit.v` | reestruturação da decisão de desvio | 15 casos |
+### O primeiro caso: load-use
 
-## O que falar
-
-### Load-use
-
-> Existe um caso que o encaminhamento não resolve. Quando uma instrução de
-> leitura de memória está no terceiro estágio e a instrução seguinte quer o
-> dado que ela vai carregar, esse dado ainda não foi lido — ele só existe no
-> fim do quarto estágio.
+> Tem uma situação em que não dá para encaminhar. Quando um `lw` está no
+> terceiro estágio e a instrução seguinte quer o dado que ele vai carregar,
+> esse dado ainda não foi lido. Ele só existe no fim do quarto estágio.
 >
-> Não há de onde encaminhar. O valor não existe em lugar nenhum do
-> processador ainda.
+> Não tem de onde encaminhar. O valor não existe em lugar nenhum ainda.
 >
-> A única saída é parar. No nosso programa isso acontece em dois pontos:
+> A única saída é parar o pipeline por um ciclo. No nosso programa isso
+> acontece em dois pontos:
 
 ```
 PC= 16   lw  $t0, 4($t1)  ->  sw  $t0, 0($t1)
 PC=100   lw  $t4, 4($t2)  ->  slt $t0, $t4, $t3
 ```
 
-> Quando a detecção atua, três coisas acontecem no mesmo ciclo: o contador de
-> programa não avança, o primeiro registrador de estágio não atualiza, e o
-> segundo recebe uma bolha.
+> O `deteccao_hazard` é quem percebe isso. Quando ele detecta, três coisas
+> acontecem ao mesmo tempo: o PC não avança, o primeiro registrador não
+> atualiza, e o segundo recebe uma bolha.
 >
-> O terceiro é o que importa. Sem ele, a instrução que ficou parada seria
-> executada duas vezes.
+> A terceira é a que importa. Sem ela a instrução que ficou parada
+> executaria duas vezes.
 
-### Desvios
+### O segundo caso: desvios
 
-> O outro perigo é de controle. Enquanto o processador não sabe se um desvio
-> vai ser tomado, ele continua buscando as instruções seguintes. Quando a
-> decisão sai, essas instruções já estão dentro do pipeline.
+> O outro problema é que, enquanto o processador não sabe se um desvio vai
+> ser tomado, ele continua buscando as instruções seguintes. Quando a
+> resposta sai, essas instruções já entraram no pipeline e têm que ser
+> jogadas fora. Quem faz isso é o `controle_flush`.
 >
-> Aqui tomamos uma decisão de projeto. A unidade de controle do monociclo
-> recebia o sinal de igualdade da ALU para decidir o desvio — isso não
-> sobrevive ao pipeline, porque a unidade de controle está no segundo estágio
-> e o sinal da ALU só existe no terceiro.
+> Aqui a gente teve que tomar uma decisão de projeto, e eu mexi na unidade
+> de controle por causa dela.
 >
-> Tínhamos duas opções: resolver o desvio no quarto estágio, como a primeira
-> versão do livro, ou no terceiro. Escolhemos o **terceiro**, porque é ali
-> que o sinal da ALU nasce. Resolver no quarto descartaria três instruções a
-> cada desvio; no terceiro, apenas duas.
+> No monociclo, a unidade de controle recebia o sinal de igualdade da ALU e
+> decidia o desvio ali mesmo. No pipeline isso não funciona: a unidade de
+> controle está no segundo estágio e o sinal da ALU só existe no terceiro.
 >
-> A unidade de controle deixou de decidir e passou a apenas sinalizar a
-> intenção — se é um `beq`, um `bne`, um salto ou um retorno de função. Essas
-> bandeiras viajam com a instrução até o terceiro estágio, e lá o bloco de
-> flush combina a intenção com o resultado da comparação.
+> A gente tinha duas opções. Resolver o desvio no quarto estágio, que é como
+> o livro faz na primeira versão, ou resolver no terceiro. **A gente
+> escolheu o terceiro**, porque é ali que o sinal da ALU nasce. No quarto, a
+> gente jogaria fora três instruções por desvio. No terceiro, só duas.
 >
-> No nosso programa há **onze** instruções de transferência de controle.
+> Então a unidade de controle parou de decidir. Agora ela só sinaliza a
+> intenção: se é um `beq`, um `bne`, um salto ou um retorno de função. Essas
+> bandeiras viajam com a instrução até o terceiro estágio, e lá o
+> `controle_flush` junta a intenção com o resultado da comparação e decide.
+>
+> No nosso programa são **onze** instruções que mexem no fluxo.
 
-## Resultado
-
-```
-deteccao_hazard 7 · controle_flush 8 · control_unit 15   = 30 casos aprovados
-```
+**Resultado:** `deteccao_hazard` 7 · `controle_flush` 8 · `control_unit` 15
+→ **30 casos aprovados**.
 
 ---
 
-# FECHAMENTO — RESULTADOS · 2 minutos · *qualquer um*
+# FECHAMENTO — 2 minutos
 
-## Rodar ao vivo
+## Rodar na frente dele
 
 ```bash
 make
 ```
 
-> Trinta e um módulos, duzentos e trinta e sete casos, todos aprovados.
+> Todos os módulos têm testbench. São trinta e dois módulos e duzentos e
+> cinquenta e sete casos, todos passando.
 
 ```bash
 make run-mips_pipeline V=1
 ```
 
-> E este é o processador completo executando o programa de ordenação.
+> E aqui é o processador completo rodando o programa de ordenação.
 
 ```
 vetor inicial : 5 3 8 1 9 2 7 4
@@ -259,79 +238,103 @@ $sp restaurado em 1024
 $zero permanece 0
 ```
 
-## O número que importa
+> Além do vetor, a gente confere mais duas coisas: que o ponteiro de pilha
+> voltou ao valor inicial, o que prova que o epílogo da função restaurou
+> tudo, e que o registrador zero continua zero depois de quatrocentas
+> instruções.
 
-> Mas o resultado mais interessante não é o vetor ordenado — é a contagem de
-> ciclos.
->
-> O monociclo levava **406 ciclos**. O pipeline leva **562**.
->
-> O pipeline é mais lento em ciclos. Isso é esperado, e é o ponto que vale
-> explicar: o ganho do pipeline não está em executar menos ciclos. Está em
-> cada ciclo ser **mais curto**. No monociclo o período precisa acomodar a
-> instrução mais lenta, que atravessa seis blocos em série. No pipeline,
-> apenas o estágio mais lento.
->
-> A razão entre os dois é **1,38**. Ou seja: o pipeline compensa se o seu
-> clock puder ser mais que 38% mais rápido — o que é folgado, porque
-> dividimos um caminho de seis blocos em cinco pedaços.
+## O número que a gente acha mais interessante
 
-## A verificação que dá confiança
+> O monociclo levava **406 ciclos**. O pipeline leva **563**.
+>
+> Ou seja, em número de ciclos o pipeline é pior. E isso é esperado — o
+> ganho dele não é esse. O ganho é que cada ciclo pode ser **mais curto**.
+> No monociclo o clock tem que durar o caminho do `lw`, que atravessa seis
+> blocos em série. No pipeline, só o estágio mais lento.
+>
+> A razão entre os dois é **1,39**. Então o pipeline compensa se o clock
+> puder ser 39% mais rápido, o que é bastante folgado para um caminho que a
+> gente dividiu em cinco pedaços.
 
-> Para garantir que o resultado não foi coincidência, escrevemos um modelo
-> do pipeline em Python, independente do Verilog. Ele executa o mesmo binário
-> e prevê a contagem de ciclos somando as penalidades:
+## Como a gente sabe que não foi sorte
+
+> Para não depender só do vetor sair ordenado, a gente escreveu um modelo do
+> pipeline em Python, separado do Verilog. Ele roda o mesmo binário e prevê
+> quantos ciclos deveria levar, somando as penalidades:
 
 ```
 instruções executadas                      406
 enchimento do pipeline                       4
-transferências de controle tomadas  x2     126
+desvios tomados                     x2     126
 stalls de load-use                  x1      33
 -------------------------------------------------
 previsto                                   563
-medido no Verilog                          562
+medido no Verilog                          563
 ```
 
-> Um ciclo de diferença, que é convenção de contagem.
+> O número bate exato.
 >
-> Isso é mais forte que o vetor sair ordenado. Se houvesse um perigo sendo
-> tratado errado, o vetor até poderia sair certo por coincidência — mas o
-> número de stalls e de descartes não bateria.
+> Isso é mais forte que o vetor ordenado. Se a gente estivesse tratando
+> algum perigo errado, o vetor até poderia sair certo por coincidência — mas
+> o número de stalls e de descartes não ia bater.
+>
+> E vale contar como a gente chegou nesse número: o testbench do processador
+> dizia 562, um a menos. A diferença não era do projeto, era do testbench —
+> ele lia os sinais **depois** da borda de clock, quando eles já valem para o
+> ciclo seguinte. Passando a ler antes da borda, deu 563 e fechou com o
+> modelo. Quem apontou o erro foi o contador que a gente pôs na placa, que
+> mostrava 563 desde o começo.
 
-## Honestidade sobre o que ficou
+## O que a gente sabe que ficou faltando
 
-> Uma limitação conhecida: a instrução de retorno de função lê um registrador
-> para decidir o endereço. Se esse registrador tivesse sido escrito por uma
+> Uma limitação que a gente conhece: o `jr` lê um registrador para decidir o
+> endereço de volta. Se esse registrador tivesse sido escrito por uma
 > instrução muito recente, haveria uma dependência que o nosso projeto não
-> trata. No nosso programa isso não ocorre — os dois retornos leem um
-> registrador escrito muitas instruções antes. Está documentado no relatório.
+> trata. No nosso programa isso não acontece, porque os dois `jr` leem o
+> `$ra`, que foi escrito muito antes. Está registrado no relatório.
 
 ---
 
-## Perguntas prováveis e respostas
+## Se ele perguntar
 
 **"Por que o pipeline gasta mais ciclos?"**
-Porque acrescenta penalidades: dois ciclos por desvio tomado e um por
-load-use. O ganho é no período do clock, não na contagem de ciclos.
+> Porque ele acrescenta penalidade: dois ciclos por desvio tomado e um por
+> load-use. O ganho está no período do clock, não na contagem.
 
-**"Por que vocês resolveram o desvio no terceiro estágio e não no quarto?"**
-Porque o sinal de igualdade nasce na ALU, que está no terceiro. Resolver ali
-descarta duas instruções em vez de três. Resolver no segundo descartaria
-apenas uma, mas exigiria um comparador dedicado e encaminhamento adicional —
-registramos como trabalho futuro.
+**"Por que vocês resolveram o desvio no terceiro estágio?"**
+> Porque é onde o sinal da ALU nasce. No quarto a gente jogaria fora três
+> instruções, no terceiro só duas. Dava para resolver no segundo e jogar
+> fora só uma, mas aí precisaria de um comparador próprio e mais
+> encaminhamento. A gente deixou registrado como melhoria possível.
 
-**"O que acontece se o encaminhamento e o stall forem necessários ao mesmo
-tempo?"**
-A detecção tem prioridade. O registrador entre a busca e a decodificação
-segura o valor em vez de descartá-lo, porque segurar é recuperável e
-descartar não é.
+**"E se precisar parar e encaminhar ao mesmo tempo?"**
+> O stall tem prioridade. O registrador segura o valor em vez de descartar,
+> porque segurar dá para desfazer e descartar não.
 
 **"Como vocês sabem que a bolha não altera nada?"**
-O testbench do registrador aciona a limpeza com as entradas de escrita
-ligadas e verifica que as saídas saem desligadas. São dois casos específicos
-para isso.
+> Tem um teste para isso. A gente liga a limpeza com os sinais de escrita em
+> 1 e verifica que saem em 0.
 
-**"Os módulos estão parametrizados?"**
-Sim, todos. As larguras vêm de `parameter`, não de números escritos no corpo.
-Vários testbenches instanciam o mesmo módulo duas vezes com larguras
-diferentes para demonstrar.
+**"Está tudo parametrizado?"**
+> Está. As larguras vêm de `parameter`, não tem número escrito no meio do
+> código. Em vários testbenches a gente instancia o mesmo módulo duas vezes
+> com larguras diferentes para mostrar que funciona.
+
+**"Isso roda na FPGA?"**
+> Roda. A gente fez um invólucro de placa para o pipeline também,
+> `fpga/de2_115_top_pipeline.v`, com a pinagem em
+> `quartus/pinos_de2_115_pipeline.qsf`. Se o senhor quiser mexer, os
+> controles estão em `quartus/COMO-ABRIR.md`.
+
+**"O que eu vejo na placa?"**
+> O mesmo do monociclo, mais três coisas que só existem no pipeline. `SW[15]`
+> escolhe a velocidade: devagar leva os mesmos 6 minutos e 46 da entrega
+> passada, rápido termina em 51 segundos. `SW[16]` troca os displays do valor
+> do vetor para o contador de ciclos, que para em 0x233, que é 563. E três
+> LEDs verdes acendem no ciclo em que cada perigo acontece: `LEDG[1]` o
+> stall, `LEDG[2]` o descarte de desvio, `LEDG[3]` o encaminhamento.
+>
+> No modo passo-a-passo, `SW[17]`, dá para ver o custo do desvio contando os
+> apertos. O primeiro `j main` leva três apertos para o PC sair de 0 e ir
+> para 168: nos dois primeiros o PC vai para 4 e 8, que são as instruções
+> buscadas por engano e descartadas depois. No monociclo era um aperto só.

@@ -8,6 +8,7 @@
 #    make run-alu V=1   a saida completa de um modulo so
 #    make lint       so confere a sintaxe de todos os modulos de rtl/
 #    make mif        regera mem/programa.mif e mem/programa.txt do assembly
+#    make qsf        regera a pinagem da versao pipeline a partir da do monociclo
 #    make clean      apaga build/
 #
 #  Descobre os modulos sozinho, em rtl/ (processador) e fpga/ (invólucro de
@@ -47,7 +48,7 @@ fontes_de = $(if $(wildcard fpga/$(1).v),$(RTL),$(RTL_CPU))
 COM_TB = $(foreach m,$(MODULOS),$(if $(call tb_de,$(m)),$(m)))
 SEM_TB = $(foreach m,$(MODULOS),$(if $(call tb_de,$(m)),,$(m)))
 
-.PHONY: all test verbose lint mif clean
+.PHONY: all test verbose lint mif qsf clean
 .NOTPARALLEL:
 
 all: test
@@ -102,6 +103,14 @@ lint:
 
 mif:
 	@python3 tools/assembler.py mem/programa.asm mem/programa.mif
+
+# A pinagem das duas versoes e identica: so muda a entidade de topo. Gerar em
+# vez de manter duas copias a mao evita que elas saiam de sincronia.
+qsf:
+	@sed -e 's/^set_global_assignment -name TOP_LEVEL_ENTITY de2_115_top$$/set_global_assignment -name TOP_LEVEL_ENTITY de2_115_top_pipeline/' \
+	     -e 's|^#  pinos_de2_115.qsf — atribuicao de pinos da DE2-115$$|#  pinos_de2_115_pipeline.qsf — atribuicao de pinos da DE2-115 (PIPELINE)\n#\n#  ARQUIVO GERADO. Nao edite a mao: ele sai de pinos_de2_115.qsf com\n#  `make qsf`, trocando apenas a entidade de topo. A pinagem das duas\n#  versoes e exatamente a mesma, porque de2_115_top_pipeline tem as mesmas\n#  portas de de2_115_top.|' \
+	     quartus/pinos_de2_115.qsf > quartus/pinos_de2_115_pipeline.qsf
+	@echo "  quartus/pinos_de2_115_pipeline.qsf regerado"
 
 force:
 	@:
