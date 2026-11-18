@@ -29,6 +29,7 @@ module reg_id_ex #(
     input  wire [4:0]         rd_in,
     input  wire [4:0]         shamt_in,
     input  wire [5:0]         funct_in,
+    input  wire [25:0]        target_in,     // campo do salto, usado no EX
 
     // --- controle ---
     input  wire [1:0]         alu_op_in,
@@ -40,6 +41,13 @@ module reg_id_ex #(
     input  wire [1:0]         mem_to_reg_in,
     input  wire               usa_rs_in,
     input  wire               usa_rt_in,
+    // bandeiras de transferencia de controle: viajam ate o EX, onde o sinal
+    // zero da ALU existe e a decisao pode finalmente ser tomada
+    input  wire               branch_eq_in,
+    input  wire               branch_ne_in,
+    input  wire               jump_in,
+    input  wire               jr_in,
+    input  wire               eh_load_in,
 
     output reg  [LARGURA-1:0] pc_plus_4_out,
     output reg  [LARGURA-1:0] dado_1_out,
@@ -50,6 +58,7 @@ module reg_id_ex #(
     output reg  [4:0]         rd_out,
     output reg  [4:0]         shamt_out,
     output reg  [5:0]         funct_out,
+    output reg  [25:0]        target_out,
 
     output reg  [1:0]         alu_op_out,
     output reg                alu_src_a_out,
@@ -59,7 +68,12 @@ module reg_id_ex #(
     output reg                reg_write_out,
     output reg  [1:0]         mem_to_reg_out,
     output reg                usa_rs_out,
-    output reg                usa_rt_out
+    output reg                usa_rt_out,
+    output reg                branch_eq_out,
+    output reg                branch_ne_out,
+    output reg                jump_out,
+    output reg                jr_out,
+    output reg                eh_load_out
 );
     always @(posedge clk or posedge reset) begin
         if (reset || limpa) begin
@@ -74,6 +88,7 @@ module reg_id_ex #(
             rd_out        <= 5'd0;
             shamt_out     <= 5'd0;
             funct_out     <= 6'd0;
+            target_out    <= 26'd0;
 
             alu_op_out     <= 2'b00;
             alu_src_a_out  <= 1'b0;
@@ -84,6 +99,11 @@ module reg_id_ex #(
             mem_to_reg_out <= 2'b00;
             usa_rs_out     <= 1'b0;
             usa_rt_out     <= 1'b0;
+            branch_eq_out  <= 1'b0;   // <- a bolha nao desvia
+            branch_ne_out  <= 1'b0;
+            jump_out       <= 1'b0;
+            jr_out         <= 1'b0;
+            eh_load_out    <= 1'b0;
         end else begin
             pc_plus_4_out <= pc_plus_4_in;
             dado_1_out    <= dado_1_in;
@@ -94,6 +114,7 @@ module reg_id_ex #(
             rd_out        <= rd_in;
             shamt_out     <= shamt_in;
             funct_out     <= funct_in;
+            target_out    <= target_in;
 
             alu_op_out     <= alu_op_in;
             alu_src_a_out  <= alu_src_a_in;
@@ -104,6 +125,11 @@ module reg_id_ex #(
             mem_to_reg_out <= mem_to_reg_in;
             usa_rs_out     <= usa_rs_in;
             usa_rt_out     <= usa_rt_in;
+            branch_eq_out  <= branch_eq_in;
+            branch_ne_out  <= branch_ne_in;
+            jump_out       <= jump_in;
+            jr_out         <= jr_in;
+            eh_load_out    <= eh_load_in;
         end
     end
 endmodule

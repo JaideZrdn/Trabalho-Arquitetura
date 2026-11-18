@@ -31,7 +31,7 @@ RTL      := $(RTL_CPU) $(RTL_FPGA)
 MODULOS  := $(sort $(basename $(notdir $(RTL))))
 
 # caminho do testbench de um modulo, nas convencoes de nome em uso
-tb_de = $(firstword $(wildcard tb/$(1)_tb.v tb/tb_$(1)_scenarios.v fpga/tb/$(1)_tb.v))
+tb_de = $(firstword $(wildcard tb/$(1)_tb.v tb/tb_$(1).v tb/tb_$(1)_scenarios.v fpga/tb/$(1)_tb.v))
 
 # fontes a compilar: modulo de fpga/ precisa de tudo; modulo do processador
 # compila so o processador, para que o involucro de placa (e o caminho de

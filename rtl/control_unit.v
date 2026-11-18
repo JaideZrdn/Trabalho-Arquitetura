@@ -37,7 +37,28 @@ module control_unit #(
     output reg                     alu_src_b,
     output reg                     reg_write,
     output reg                     mem_write,
-    output reg  [1:0]              alu_op
+    output reg  [1:0]              alu_op,
+
+    // ---- saidas acrescentadas para o pipeline -----------------------------
+    // O monociclo nao liga nenhuma delas e continua funcionando igual.
+    //
+    // usa_rs / usa_rt dizem se a instrucao realmente LE aqueles registradores.
+    // A unidade de forwarding precisa disso: sem essa informacao ela
+    // encaminharia valores para instrucoes que nem usam o operando.
+    output reg                     usa_rs,
+    output reg                     usa_rt,
+
+    // Intencao de desvio, antes de saber o resultado da comparacao. No
+    // pipeline a decisao nao pode mais sair daqui: o sinal zero so existe
+    // um estagio adiante. Estes sinais viajam com a instrucao ate la.
+    output reg                     branch_eq,
+    output reg                     branch_ne,
+    output reg                     jump,       // j e jal
+    output reg                     jr,
+
+    // eh_load avisa o forwarding que o resultado da ALU e um ENDERECO,
+    // nao o dado — encaminhar daria o numero errado.
+    output reg                     eh_load
 );
     // opcodes do programa de teste
     localparam OP_RTYPE = 6'h00, OP_J    = 6'h02, OP_JAL  = 6'h03,
@@ -47,7 +68,8 @@ module control_unit #(
     localparam F_JR = 6'h08;
 
     // intencao de desvio, antes de consultar o sinal zero
-    reg branch_eq, branch_ne;
+    // branch_eq e branch_ne agora sao saidas: o pipeline precisa delas.
+    // O monociclo continua usando-as internamente para montar o pc_src.
     reg [1:0] pc_src_base;
 
     always @(*) begin
@@ -63,12 +85,19 @@ module control_unit #(
         alu_op      = 2'b00;
         branch_eq   = 1'b0;
         branch_ne   = 1'b0;
+        usa_rs      = 1'b0;
+        usa_rt      = 1'b0;
+        jump        = 1'b0;
+        jr          = 1'b0;
+        eh_load     = 1'b0;
 
         case (opcode)
             OP_RTYPE: begin
                 if (funct == F_JR) begin
                     // jr $ra: so troca o PC, nao escreve nada
                     pc_src_base = 2'b11;
+                    jr          = 1'b1;
+                    usa_rs      = 1'b1;       // le o registrador do retorno
                 end else begin
                     // add, slt, sll: destino em rd, resultado da ALU
                     reg_dst   = 2'b01;
@@ -76,6 +105,9 @@ module control_unit #(
                     alu_op    = 2'b10;            // a operacao vem do funct
                     // sll pega o deslocamento do campo shamt, nao de rs
                     alu_src_a = (funct == 6'h00) ? 1'b1 : 1'b0;
+                    // o sll nao le rs; as demais de formato R leem os dois
+                    usa_rs    = (funct == 6'h00) ? 1'b0 : 1'b1;
+                    usa_rt    = 1'b1;
                 end
             end
 
@@ -84,6 +116,7 @@ module control_unit #(
                 reg_write = 1'b1;
                 alu_src_b = 1'b1;                 // segundo operando: imediato
                 alu_op    = 2'b00;                // soma
+                usa_rs    = 1'b1;
             end
 
             OP_SLTI: begin                        // slti $rt, $rs, imm
@@ -91,6 +124,7 @@ module control_unit #(
                 reg_write = 1'b1;
                 alu_src_b = 1'b1;
                 alu_op    = 2'b11;                // comparacao com sinal
+                usa_rs    = 1'b1;
             end
 
             OP_LW: begin                          // lw $rt, imm($rs)
@@ -99,27 +133,36 @@ module control_unit #(
                 alu_src_b  = 1'b1;                // ALU calcula o endereco
                 mem_to_reg = 2'b01;               // o dado vem da memoria
                 alu_op     = 2'b00;
+                usa_rs     = 1'b1;
+                eh_load    = 1'b1;
             end
 
             OP_SW: begin                          // sw $rt, imm($rs)
                 alu_src_b = 1'b1;                 // ALU calcula o endereco
                 mem_write = 1'b1;
                 alu_op    = 2'b00;
+                usa_rs    = 1'b1;                 // registrador base
+                usa_rt    = 1'b1;                 // valor a gravar
                 // reg_write fica 0: sw nao grava em registrador
             end
 
             OP_BEQ: begin                         // beq $rs, $rt, rotulo
                 branch_eq = 1'b1;
                 alu_op    = 2'b01;                // subtrai para gerar o zero
+                usa_rs    = 1'b1;
+                usa_rt    = 1'b1;
             end
 
             OP_BNE: begin
                 branch_ne = 1'b1;
                 alu_op    = 2'b01;
+                usa_rs    = 1'b1;
+                usa_rt    = 1'b1;
             end
 
             OP_J: begin
                 pc_src_base = 2'b10;
+                jump        = 1'b1;
             end
 
             OP_JAL: begin                         // salta E grava o retorno
@@ -127,6 +170,7 @@ module control_unit #(
                 reg_dst     = 2'b10;              // destino: registrador 31
                 mem_to_reg  = 2'b10;              // dado gravado: PC+4
                 reg_write   = 1'b1;
+                jump        = 1'b1;
             end
 
             default: ;                            // mantem os valores seguros
