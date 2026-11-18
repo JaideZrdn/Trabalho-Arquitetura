@@ -95,11 +95,15 @@ run-%: force
 	    echo ""; \
 	 fi
 
+# Duas conferencias: o Icarus elabora tudo, e um script reproduz uma regra de
+# sintese que o Icarus NAO verifica — a forma do reset assincrono. Sem a
+# segunda, um erro que so o Quartus pega viajaria ate a bancada.
 lint:
 	@mkdir -p $(BUILD)
 	@if $(IVERILOG) $(FLAGS) -t null $(RTL) 2>$(BUILD)/lint.log; then \
 	    echo "$(words $(MODULOS)) modulo(s) elaboram sem erro"; \
 	 else sed 's/^/  /' $(BUILD)/lint.log; exit 1; fi
+	@python3 tools/checa_reset_assincrono.py $(RTL)
 
 mif:
 	@python3 tools/assembler.py mem/programa.asm mem/programa.mif

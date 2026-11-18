@@ -75,8 +75,51 @@ module reg_id_ex #(
     output reg                jr_out,
     output reg                eh_load_out
 );
+    // NOTA DE SINTESE
+    // A limpeza (`limpa`) e SINCRONA: ela so age na borda de clock. O reset e
+    // ASSINCRONO: ele age na hora. Por isso os dois nao podem dividir a mesma
+    // condicao. Escrever `if (reset || limpa)` simula certo no Icarus, mas o
+    // Quartus recusa:
+    //
+    //   Error (10200): Verilog HDL Conditional Statement error: cannot match
+    //   operand(s) in the condition to the corresponding edges in the
+    //   enclosing event control of the always construct
+    //
+    //   A ferramenta exige que a primeira condicao de um bloco com reset
+    //   assincrono teste EXATAMENTE os sinais que estao na lista de
+    //   sensibilidade. `limpa` nao esta la, entao ela nao reconhece o
+    //   flip-flop e nao sintetiza. Os dois casos ficam em ramos separados.
+    //   E a mesma forma que o reg_if_id ja usava.
     always @(posedge clk or posedge reset) begin
-        if (reset || limpa) begin
+        if (reset) begin
+            // dados zerados por higiene; o que realmente neutraliza a
+            // instrucao sao os sinais de escrita em zero
+            pc_plus_4_out <= {LARGURA{1'b0}};
+            dado_1_out    <= {LARGURA{1'b0}};
+            dado_2_out    <= {LARGURA{1'b0}};
+            imm_out       <= {LARGURA{1'b0}};
+            rs_out        <= 5'd0;
+            rt_out        <= 5'd0;
+            rd_out        <= 5'd0;
+            shamt_out     <= 5'd0;
+            funct_out     <= 6'd0;
+            target_out    <= 26'd0;
+
+            alu_op_out     <= 2'b00;
+            alu_src_a_out  <= 1'b0;
+            alu_src_b_out  <= 1'b0;
+            reg_dst_out    <= 2'b00;
+            mem_write_out  <= 1'b0;   // <- nao escreve na memoria
+            reg_write_out  <= 1'b0;   // <- nao escreve em registrador
+            mem_to_reg_out <= 2'b00;
+            usa_rs_out     <= 1'b0;
+            usa_rt_out     <= 1'b0;
+            branch_eq_out  <= 1'b0;   // <- a bolha nao desvia
+            branch_ne_out  <= 1'b0;
+            jump_out       <= 1'b0;
+            jr_out         <= 1'b0;
+            eh_load_out    <= 1'b0;
+        end else if (limpa) begin
             // dados zerados por higiene; o que realmente neutraliza a
             // instrucao sao os sinais de escrita em zero
             pc_plus_4_out <= {LARGURA{1'b0}};

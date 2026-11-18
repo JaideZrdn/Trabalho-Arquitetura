@@ -37,8 +37,32 @@ module reg_ex_mem #(
     output reg  [1:0]         mem_to_reg_out,
     output reg                eh_load_out
 );
+    // NOTA DE SINTESE
+    // A limpeza (`limpa`) e SINCRONA: ela so age na borda de clock. O reset e
+    // ASSINCRONO: ele age na hora. Por isso os dois nao podem dividir a mesma
+    // condicao. Escrever `if (reset || limpa)` simula certo no Icarus, mas o
+    // Quartus recusa:
+    //
+    //   Error (10200): Verilog HDL Conditional Statement error: cannot match
+    //   operand(s) in the condition to the corresponding edges in the
+    //   enclosing event control of the always construct
+    //
+    //   A ferramenta exige que a primeira condicao de um bloco com reset
+    //   assincrono teste EXATAMENTE os sinais que estao na lista de
+    //   sensibilidade. `limpa` nao esta la, entao ela nao reconhece o
+    //   flip-flop e nao sintetiza. Os dois casos ficam em ramos separados.
+    //   E a mesma forma que o reg_if_id ja usava.
     always @(posedge clk or posedge reset) begin
-        if (reset || limpa) begin
+        if (reset) begin
+            pc_plus_4_out  <= {LARGURA{1'b0}};
+            alu_result_out <= {LARGURA{1'b0}};
+            dado_2_out     <= {LARGURA{1'b0}};
+            destino_out    <= 5'd0;
+            mem_write_out  <= 1'b0;
+            reg_write_out  <= 1'b0;
+            mem_to_reg_out <= 2'b00;
+            eh_load_out    <= 1'b0;
+        end else if (limpa) begin
             pc_plus_4_out  <= {LARGURA{1'b0}};
             alu_result_out <= {LARGURA{1'b0}};
             dado_2_out     <= {LARGURA{1'b0}};
